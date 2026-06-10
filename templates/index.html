@@ -422,6 +422,17 @@
       </div>
     </div>
 
+    <!-- Batch Rename Action Bar -->
+    <div class="card" id="batch-rename-bar" style="display:none; background: rgba(59,130,246,0.1); border-color: rgba(59,130,246,0.3);">
+      <div class="flex-row" style="flex-wrap: wrap;">
+        <div style="flex:1;">
+          <label style="color:var(--text); font-size:13px; font-weight:600;">Renomear os <span id="lbl-selected-count">0</span> selecionados para:</label>
+          <input type="text" id="batch-rename-input" list="nomes-ref-list" placeholder="Digite ou selecione o nome correto..." style="margin-top:6px;" />
+        </div>
+        <button class="btn btn-green" style="align-self: flex-end;" onclick="renomearSelecionados()">✅ Renomear Selecionados</button>
+      </div>
+    </div>
+
     <div id="search-results"></div>
     <!-- datalist para nomes de referência -->
     <datalist id="nomes-ref-list"></datalist>
@@ -436,6 +447,7 @@
 let _analise = null;   // dados da última análise
 let _duvidasDecisoes = {};  // index -> 'sim'|'nao'
 let _nomesRef = [];
+let _lastSearchResults = [];
 
 // ────────────────────────────────────────────────
 // Tabs
@@ -635,7 +647,7 @@ function closeModal() {
 }
 
 // ────────────────────────────────────────────────
-// Busca
+// Busca e Lote
 // ────────────────────────────────────────────────
 let _searchTimer = null;
 function debounceSearch() {
@@ -652,78 +664,119 @@ async function buscar() {
   hideLoading();
 
   const container = document.getElementById('search-results');
+  const batchBar = document.getElementById('batch-rename-bar');
+
   if (!res.ok) {
+    batchBar.style.display = 'none';
     container.innerHTML = `<div class="card"><p class="text-sm" style="color:var(--red)">${res.erro}</p></div>`;
     return;
   }
 
+  _lastSearchResults = res.resultados;
+
   if (res.resultados.length === 0) {
+    batchBar.style.display = 'none';
     container.innerHTML = `<div class="card"><p class="text-sm">Nenhum PDF encontrado para "<strong>${termo}</strong>".</p></div>`;
     return;
   }
 
   container.innerHTML = `
-    <div class="text-sm" style="margin-bottom:12px; color:var(--text2);">
-      ${res.resultados.length} resultado(s) para "<strong style="color:var(--text)">${termo}</strong>"
+    <div class="flex-row" style="margin-bottom:12px; justify-content:space-between; align-items:center;">
+      <div class="text-sm" style="color:var(--text2);">
+        ${res.resultados.length} resultado(s) para "<strong style="color:var(--text)">${termo}</strong>"
+      </div>
+      <div>
+        <button class="btn btn-outline btn-sm" onclick="selectAll()">Marcar todos</button>
+        <button class="btn btn-outline btn-sm" onclick="unselectAll()">Desmarcar todos</button>
+      </div>
     </div>
     ${res.resultados.map((r, idx) => buildResultCard(r, idx)).join('')}`;
+
+  updateBatchSelection();
 }
 
 function buildResultCard(r, idx) {
   const pct = Math.round(r.razao * 100);
   const simClass = pct >= 80 ? 'sim-high' : pct >= 60 ? 'sim-mid' : 'sim-low';
   return `
-    <div class="result-card">
-      <div class="result-head">
-        <div>
+    <div class="result-card" id="res-card-${idx}">
+      <div class="result-head" style="justify-content: flex-start; gap: 16px;">
+        <input type="checkbox" class="batch-cb" value="${idx}" style="width:18px;height:18px;" onchange="updateBatchSelection()" />
+        <div style="flex:1;">
           <div class="result-name">📄 ${r.stem}</div>
           <div class="result-meta">📂 ${r.pasta} &nbsp;|&nbsp; arquivo: ${r.arquivo}</div>
         </div>
         <div style="display:flex;align-items:center;gap:10px;">
           <span class="sim-pct ${simClass}">${pct}%</span>
-          <button class="btn btn-outline btn-sm" onclick="toggleRenameForm(${idx})">✏️ Renomear</button>
         </div>
-      </div>
-      <div class="rename-form" id="form-${idx}">
-        <label>Novo nome (sem .pdf):</label>
-        <div class="rename-row">
-          <input type="text" id="input-rename-${idx}"
-                 value="${r.stem}"
-                 list="nomes-ref-list"
-                 placeholder="Digite o nome correto..." />
-          <button class="btn btn-green btn-sm" onclick="confirmarRename(${idx}, '${escape(r.pasta_path)}', '${escape(r.arquivo)}')">
-            ✅ Confirmar
-          </button>
-          <button class="btn btn-outline btn-sm" onclick="toggleRenameForm(${idx})">Cancelar</button>
-        </div>
-        <p class="text-sm mt-8">💡 Os nomes da sua planilha de referência aparecem como sugestão no campo acima.</p>
       </div>
     </div>`;
 }
 
-function toggleRenameForm(idx) {
-  const form = document.getElementById(`form-${idx}`);
-  form.classList.toggle('open');
-  if (form.classList.contains('open')) {
-    document.getElementById(`input-rename-${idx}`).focus();
+function selectAll() {
+  document.querySelectorAll('.batch-cb').forEach(cb => cb.checked = true);
+  updateBatchSelection();
+}
+
+function unselectAll() {
+  document.querySelectorAll('.batch-cb').forEach(cb => cb.checked = false);
+  updateBatchSelection();
+}
+
+function updateBatchSelection() {
+  const cbs = document.querySelectorAll('.batch-cb:checked');
+  const batchBar = document.getElementById('batch-rename-bar');
+  if (cbs.length > 0) {
+    batchBar.style.display = 'block';
+    document.getElementById('lbl-selected-count').textContent = cbs.length;
+  } else {
+    batchBar.style.display = 'none';
   }
 }
 
-async function confirmarRename(idx, pastaPathEsc, arquivoEsc) {
-  const pastaPath = unescape(pastaPathEsc);
-  const arquivo = unescape(arquivoEsc);
-  const novoNome = document.getElementById(`input-rename-${idx}`).value.trim();
-  if (!novoNome) return toast('Digite o novo nome', 'error');
+async function renomearSelecionados() {
+  const cbs = document.querySelectorAll('.batch-cb:checked');
+  if (cbs.length === 0) return;
 
-  const res = await post('/api/renomear', { pasta_path: pastaPath, arquivo, novo_nome: novoNome });
-  if (!res.ok) return toast(res.erro, 'error');
+  const novoNomeRef = document.getElementById('batch-rename-input').value.trim();
+  if (!novoNomeRef) return toast('Digite ou selecione o novo nome de referência', 'error');
 
-  toast(`✅ Renomeado para: ${res.novo_nome}`, 'success');
-  // Atualiza o card visualmente
-  const card = document.getElementById(`form-${idx}`).closest('.result-card');
-  card.style.opacity = '0.5';
-  card.querySelector('.result-name').textContent = `📄 ${novoNome} ✅`;
-  card.querySelector('.rename-form').classList.remove('open');
+  const items = [];
+  cbs.forEach(cb => {
+    const idx = parseInt(cb.value);
+    const r = _lastSearchResults[idx];
+    if (r) {
+      items.push({
+        pasta_path: r.pasta_path,
+        arquivo: r.arquivo,
+        nome_ref: novoNomeRef
+      });
+    }
+  });
+
+  showLoading(`Renomeando ${items.length} arquivo(s)...`);
+  // Reaproveita a rota de executar em massa que já lida com variações, homônimos etc.
+  const res = await post('/api/executar', { items });
+  hideLoading();
+
+  if (!res.ok) return toast('Erro ao renomear arquivos em lote', 'error');
+  
+  showModalResultados(res.resultados);
+  document.getElementById('batch-rename-input').value = '';
+  
+  // Atualiza visualmente os cards que deram certo
+  cbs.forEach(cb => {
+    const idx = parseInt(cb.value);
+    const r = res.resultados.find(x => x.arquivo === _lastSearchResults[idx].arquivo && (x.status === 'ok' || x.status === 'igual'));
+    if (r) {
+      const card = document.getElementById(`res-card-${idx}`);
+      card.style.opacity = '0.5';
+      card.querySelector('.result-name').textContent = `📄 ${novoNomeRef} ✅`;
+      cb.checked = false;
+      cb.disabled = true;
+    }
+  });
+  updateBatchSelection();
 }
 
 // ────────────────────────────────────────────────
