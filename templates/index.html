@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gerenciador de PDFs</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #07071a;
+      --bg2: #0e0e28;
+      --surface: rgba(255,255,255,0.05);
+      --surface2: rgba(255,255,255,0.09);
+      --border: rgba(255,255,255,0.08);
+      --border2: rgba(255,255,255,0.15);
+      --text: #e2e8f0;
+      --text2: #94a3b8;
+      --purple: #7c3aed;
+      --purple2: #6d28d9;
+      --blue: #3b82f6;
+      --green: #10b981;
+      --yellow: #f59e0b;
+      --red: #ef4444;
+      --radius: 14px;
+      --radius-sm: 8px;
+    }
+
+    html { font-family: 'Inter', sans-serif; font-size: 14px; }
+    body { background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+
+    /* ─── Glow BG ─── */
+    body::before {
+      content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+      background: radial-gradient(ellipse 60% 40% at 20% 10%, rgba(124,58,237,0.15) 0%, transparent 70%),
+                  radial-gradient(ellipse 50% 40% at 80% 80%, rgba(59,130,246,0.10) 0%, transparent 70%);
+    }
+
+    /* ─── Nav ─── */
+    header {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(7,7,26,0.85); backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border2);
+      padding: 0 28px;
+      display: flex; align-items: center; gap: 32px; height: 60px;
+    }
+    .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 16px;
+      background: linear-gradient(135deg, #7c3aed, #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .logo span { font-size: 22px; -webkit-text-fill-color: unset; }
+    .tabs { display: flex; gap: 4px; flex: 1; }
+    .tab-btn {
+      padding: 8px 18px; border-radius: 8px; border: none; cursor: pointer;
+      background: transparent; color: var(--text2); font-size: 13px; font-weight: 500;
+      font-family: inherit; transition: all 0.2s; display: flex; align-items: center; gap: 7px;
+    }
+    .tab-btn:hover { background: var(--surface); color: var(--text); }
+    .tab-btn.active { background: rgba(124,58,237,0.2); color: #a78bfa; border: 1px solid rgba(124,58,237,0.3); }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text2); transition: background 0.3s; }
+    .status-dot.ok { background: var(--green); box-shadow: 0 0 6px var(--green); }
+
+    /* ─── Layout ─── */
+    main { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 28px 24px; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ─── Cards ─── */
+    .card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 24px; margin-bottom: 16px;
+      backdrop-filter: blur(12px);
+    }
+    .card-title { font-weight: 700; font-size: 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+    .card-title small { font-weight: 400; font-size: 12px; color: var(--text2); }
+
+    /* ─── Buttons ─── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 20px; border-radius: var(--radius-sm); border: none; cursor: pointer;
+      font-size: 13px; font-weight: 600; font-family: inherit; transition: all 0.2s; white-space: nowrap;
+    }
+    .btn-primary { background: linear-gradient(135deg, var(--purple), var(--blue)); color: #fff; }
+    .btn-primary:hover { filter: brightness(1.15); transform: translateY(-1px); box-shadow: 0 4px 20px rgba(124,58,237,0.4); }
+    .btn-outline { background: transparent; border: 1px solid var(--border2); color: var(--text2); }
+    .btn-outline:hover { background: var(--surface2); color: var(--text); border-color: var(--purple); }
+    .btn-green { background: linear-gradient(135deg, #059669, #10b981); color: #fff; }
+    .btn-green:hover { filter: brightness(1.15); }
+    .btn-red { background: linear-gradient(135deg, #b91c1c, #ef4444); color: #fff; }
+    .btn-red:hover { filter: brightness(1.15); }
+    .btn-sm { padding: 6px 14px; font-size: 12px; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
+
+    /* ─── Input ─── */
+    input[type=text], input[type=search] {
+      background: var(--surface2); border: 1px solid var(--border2); border-radius: var(--radius-sm);
+      color: var(--text); font-size: 13px; font-family: inherit;
+      padding: 10px 14px; outline: none; transition: border-color 0.2s; width: 100%;
+    }
+    input:focus { border-color: var(--purple); }
+    label { font-size: 12px; color: var(--text2); font-weight: 500; display: block; margin-bottom: 6px; }
+
+    /* ─── Config grid ─── */
+    .config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 700px) { .config-grid { grid-template-columns: 1fr; } }
+    .config-box {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 22px; display: flex; flex-direction: column; gap: 12px;
+    }
+    .config-box h3 { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .config-info { font-size: 12px; color: var(--text2); background: rgba(0,0,0,0.3); border-radius: 6px; padding: 10px 12px; min-height: 38px; word-break: break-all; }
+    .config-info.filled { color: var(--green); }
+
+    /* ─── Badges ─── */
+    .badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600;
+    }
+    .badge-green { background: rgba(16,185,129,0.15); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.3); }
+    .badge-blue  { background: rgba(59,130,246,0.15); color: #93c5fd; border: 1px solid rgba(59,130,246,0.3); }
+    .badge-yellow{ background: rgba(245,158,11,0.15); color: #fcd34d; border: 1px solid rgba(245,158,11,0.3); }
+    .badge-red   { background: rgba(239,68,68,0.15);  color: #fca5a5; border: 1px solid rgba(239,68,68,0.3); }
+    .badge-purple{ background: rgba(124,58,237,0.15); color: #c4b5fd; border: 1px solid rgba(124,58,237,0.3); }
+
+    /* ─── Análise stats ─── */
+    .stat-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+    .stat-box {
+      flex: 1; min-width: 110px; background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 16px; text-align: center;
+    }
+    .stat-num { font-size: 28px; font-weight: 800; line-height: 1; }
+    .stat-label { font-size: 11px; color: var(--text2); margin-top: 4px; }
+
+    /* ─── Dúvida cards ─── */
+    .duvida-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 16px; margin-bottom: 10px; display: grid;
+      grid-template-columns: 1fr auto; gap: 12px; align-items: center;
+      transition: all 0.25s;
+    }
+    .duvida-card.sim  { border-color: rgba(16,185,129,0.5); background: rgba(16,185,129,0.07); }
+    .duvida-card.nao  { border-color: rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); opacity: 0.5; }
+    .duvida-meta { font-size: 11px; color: var(--text2); margin-top: 4px; }
+    .duvida-arrow { color: var(--text2); font-size: 18px; }
+    .duvida-ref { color: var(--green); font-weight: 600; font-size: 13px; }
+    .duvida-curr { font-size: 13px; font-weight: 500; }
+    .duvida-btns { display: flex; gap: 8px; }
+
+    /* ─── Rename list ─── */
+    .rename-item {
+      display: flex; align-items: center; gap: 12px; padding: 10px 14px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 8px;
+      font-size: 12px;
+    }
+    .rename-item .pasta-tag { color: var(--text2); flex-shrink: 0; }
+    .rename-item .curr { flex: 1; }
+    .rename-item .arrow { color: var(--blue); flex-shrink: 0; }
+    .rename-item .ref { color: var(--green); flex: 1; }
+
+    /* ─── Sem match ─── */
+    .sem-match-item { padding: 8px 14px; background: rgba(239,68,68,0.07); border: 1px solid rgba(239,68,68,0.15); border-radius: 6px; margin-bottom: 6px; font-size: 12px; }
+    .sem-match-item .sm-pasta { color: var(--text2); font-size: 11px; }
+
+    /* ─── Busca ─── */
+    .search-wrap { display: flex; gap: 10px; align-items: center; margin-bottom: 20px; }
+    .search-wrap input { flex: 1; font-size: 14px; padding: 12px 16px; }
+    .result-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 14px 18px; margin-bottom: 10px;
+    }
+    .result-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .result-name { font-weight: 600; font-size: 14px; }
+    .result-meta { font-size: 11px; color: var(--text2); margin-top: 3px; }
+    .rename-form { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); display: none; }
+    .rename-form.open { display: block; }
+    .rename-row { display: flex; gap: 10px; margin-top: 10px; align-items: center; }
+    .rename-row input { flex: 1; }
+    .sim-pct { font-size: 11px; font-weight: 700; }
+    .sim-high { color: var(--green); }
+    .sim-mid  { color: var(--yellow); }
+    .sim-low  { color: var(--red); }
+    datalist option { background: var(--bg2); color: var(--text); }
+
+    /* ─── Accordion ─── */
+    .accordion-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px; background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); cursor: pointer; margin-bottom: 8px;
+      font-weight: 600; font-size: 13px; user-select: none; transition: background 0.2s;
+    }
+    .accordion-header:hover { background: var(--surface2); }
+    .accordion-body { display: none; }
+    .accordion-body.open { display: block; }
+    .accordion-arrow { transition: transform 0.2s; }
+    .accordion-arrow.open { transform: rotate(180deg); }
+
+    /* ─── Resultados ─── */
+    .result-list { margin-top: 16px; }
+    .result-row {
+      display: flex; align-items: center; gap: 12px; padding: 10px 14px;
+      border-radius: 6px; margin-bottom: 4px; font-size: 12px;
+    }
+    .r-ok     { background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2); }
+    .r-excluido { background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.2); }
+    .r-conflito { background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.2); }
+    .r-erro   { background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); }
+
+    /* ─── Toast ─── */
+    #toast-container { position: fixed; top: 72px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
+    .toast {
+      padding: 12px 18px; border-radius: 10px; font-size: 13px; font-weight: 500; min-width: 260px;
+      backdrop-filter: blur(20px); box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      animation: slideIn 0.3s ease; max-width: 380px;
+    }
+    .toast-success { background: rgba(16,185,129,0.2); border: 1px solid rgba(16,185,129,0.4); color: #6ee7b7; }
+    .toast-error   { background: rgba(239,68,68,0.2);  border: 1px solid rgba(239,68,68,0.4);  color: #fca5a5; }
+    .toast-info    { background: rgba(59,130,246,0.2); border: 1px solid rgba(59,130,246,0.4); color: #93c5fd; }
+    @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+
+    /* ─── Spinner ─── */
+    .spinner { width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff;
+               border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ─── Loading overlay ─── */
+    #loading { position: fixed; inset: 0; background: rgba(7,7,26,0.7); backdrop-filter: blur(6px);
+               z-index: 999; display: none; align-items: center; justify-content: center; flex-direction: column; gap: 16px; }
+    #loading.show { display: flex; }
+    #loading p { color: var(--text2); font-size: 14px; }
+
+    /* ─── Modal ─── */
+    #modal { position: fixed; inset: 0; background: rgba(7,7,26,0.8); backdrop-filter: blur(8px);
+             z-index: 1000; display: none; align-items: center; justify-content: center; padding: 24px; }
+    #modal.show { display: flex; }
+    .modal-box { background: var(--bg2); border: 1px solid var(--border2); border-radius: 18px;
+                 padding: 28px; max-width: 700px; width: 100%; max-height: 80vh; overflow-y: auto; }
+    .modal-title { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
+    .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+
+    /* ─── Divider ─── */
+    .divider { height: 1px; background: var(--border); margin: 20px 0; }
+
+    /* ─── Misc ─── */
+    .flex-row { display: flex; gap: 10px; align-items: center; }
+    .text-sm { font-size: 12px; color: var(--text2); }
+    .mt-8 { margin-top: 8px; }
+    .mt-16 { margin-top: 16px; }
+    p { line-height: 1.6; }
+    .section-title { font-weight: 700; font-size: 15px; color: var(--text); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<!-- ─── Header ─────────────────────────────────────────────── -->
+<header>
+  <div class="logo"><span>📋</span> Gerenciador de PDFs</div>
+  <div class="tabs">
+    <button class="tab-btn active" onclick="showTab('config')">
+      <span class="status-dot" id="dot-config"></span> ⚙️ Configuração
+    </button>
+    <button class="tab-btn" onclick="showTab('correcao')">
+      🔄 Correção em Massa
+    </button>
+    <button class="tab-btn" onclick="showTab('busca')">
+      🔍 Buscar Pessoa
+    </button>
+  </div>
+</header>
+
+<!-- ─── Toast container ─────────────────────────────────────── -->
+<div id="toast-container"></div>
+
+<!-- ─── Loading overlay ─────────────────────────────────────── -->
+<div id="loading">
+  <div class="spinner" style="width:40px;height:40px;border-width:3px;"></div>
+  <p id="loading-msg">Processando...</p>
+</div>
+
+<!-- ─── Modal de resultados ─────────────────────────────────── -->
+<div id="modal">
+  <div class="modal-box">
+    <div class="modal-title" id="modal-title">Resultados</div>
+    <div id="modal-body"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal()">✕ Fechar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Main ────────────────────────────────────────────────── -->
+<main>
+
+  <!-- ═══ Tab 1: Configuração ═══════════════════════════════ -->
+  <div id="tab-config" class="tab-panel active">
+    <div class="card-title" style="font-size:20px; margin-bottom:20px;">
+      ⚙️ Configuração
+      <small>Configure a pasta raiz e a planilha de referência antes de usar</small>
+    </div>
+
+    <div class="config-grid">
+      <!-- Pasta raiz -->
+      <div class="config-box">
+        <h3>📁 Pasta Raiz dos PDFs</h3>
+        <p class="text-sm">Selecione a pasta principal que contém as subpastas com os PDFs (ex: FGTS 2007, FGTS 2008...)</p>
+        <div class="config-info" id="info-pasta-raiz">Nenhuma pasta selecionada</div>
+        <button class="btn btn-primary" onclick="selecionarPastaRaiz()">
+          📁 Selecionar Pasta
+        </button>
+        <div id="info-pdfs" class="text-sm" style="display:none;"></div>
+      </div>
+
+      <!-- Planilha de referência -->
+      <div class="config-box">
+        <h3>📊 Planilha de Referência</h3>
+        <p class="text-sm">Selecione a planilha com os nomes já conferidos e corretos (lê a coluna D — NOMES). Pode selecionar múltiplas planilhas.</p>
+        <div class="config-info" id="info-planilha">Nenhuma planilha carregada</div>
+        <button class="btn btn-primary" onclick="carregarPlanilha()">
+          📊 Selecionar Planilha(s)
+        </button>
+        <div id="info-nomes" class="text-sm" style="display:none;"></div>
+      </div>
+    </div>
+
+    <!-- Preview de nomes -->
+    <div id="preview-nomes" class="card mt-16" style="display:none;">
+      <div class="card-title">📋 Nomes carregados <small id="preview-count"></small></div>
+      <div id="preview-list" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
+    </div>
+  </div>
+
+  <!-- ═══ Tab 2: Correção em Massa ══════════════════════════ -->
+  <div id="tab-correcao" class="tab-panel">
+    <div class="card-title" style="font-size:20px; margin-bottom:20px;">
+      🔄 Correção em Massa
+    </div>
+
+    <div class="card" id="card-analisar">
+      <p class="text-sm" style="margin-bottom:14px;">Compara cada PDF das subpastas com os nomes da planilha de referência e identifica divergências para corrigir.</p>
+      <button class="btn btn-primary" id="btn-analisar" onclick="analisar()">
+        🔍 Analisar PDFs
+      </button>
+    </div>
+
+    <!-- Resultados da análise -->
+    <div id="analise-result" style="display:none;">
+
+      <!-- Stats -->
+      <div class="stat-row">
+        <div class="stat-box">
+          <div class="stat-num" style="color:var(--green)" id="stat-corretos">0</div>
+          <div class="stat-label">✅ Corretos</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-num" style="color:var(--blue)" id="stat-auto">0</div>
+          <div class="stat-label">🔄 Rename automático</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-num" style="color:var(--yellow)" id="stat-duvidas">0</div>
+          <div class="stat-label">❓ Dúvidas</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-num" style="color:var(--red)" id="stat-sem">0</div>
+          <div class="stat-label">❌ Sem match</div>
+        </div>
+      </div>
+
+      <!-- Rename automático -->
+      <div id="section-auto" style="display:none;">
+        <div class="accordion-header" onclick="toggleAccordion('acc-auto')">
+          <span>🔄 Renomeação Automática (alta confiança)</span>
+          <span class="accordion-arrow" id="arrow-acc-auto">▼</span>
+        </div>
+        <div class="accordion-body" id="acc-auto">
+          <div id="list-auto"></div>
+        </div>
+      </div>
+
+      <!-- Dúvidas -->
+      <div id="section-duvidas" style="display:none; margin-top:16px;">
+        <div class="section-title">❓ Dúvidas — confirme cada caso</div>
+        <div id="list-duvidas"></div>
+      </div>
+
+      <!-- Sem match -->
+      <div id="section-sem" style="display:none; margin-top:16px;">
+        <div class="accordion-header" onclick="toggleAccordion('acc-sem')">
+          <span>❌ Sem correspondência na referência</span>
+          <span class="accordion-arrow" id="arrow-acc-sem">▼</span>
+        </div>
+        <div class="accordion-body" id="acc-sem">
+          <div id="list-sem"></div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="flex-row" style="justify-content:space-between; flex-wrap:wrap; gap:10px;">
+        <div class="text-sm" id="exec-status">Confirme as dúvidas acima e clique em Executar</div>
+        <button class="btn btn-green" id="btn-executar" onclick="executar()">
+          ▶️ Executar Correções
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Tab 3: Buscar Pessoa ══════════════════════════════ -->
+  <div id="tab-busca" class="tab-panel">
+    <div class="card-title" style="font-size:20px; margin-bottom:20px;">
+      🔍 Buscar Pessoa
+    </div>
+
+    <div class="card">
+      <p class="text-sm" style="margin-bottom:14px;">Digite o nome (ou parte dele) para localizar em todas as subpastas da pasta raiz.</p>
+      <div class="search-wrap">
+        <input type="search" id="search-input" placeholder="Ex: JOSE DA SILVA..." autocomplete="off"
+               oninput="debounceSearch()" onkeydown="if(event.key==='Enter') buscar()" />
+        <button class="btn btn-primary" onclick="buscar()">🔍 Buscar</button>
+      </div>
+    </div>
+
+    <div id="search-results"></div>
+    <!-- datalist para nomes de referência -->
+    <datalist id="nomes-ref-list"></datalist>
+  </div>
+
+</main>
+
+<script>
+// ────────────────────────────────────────────────
+// Estado global
+// ────────────────────────────────────────────────
+let _analise = null;   // dados da última análise
+let _duvidasDecisoes = {};  // index -> 'sim'|'nao'
+let _nomesRef = [];
+
+// ────────────────────────────────────────────────
+// Tabs
+// ────────────────────────────────────────────────
+function showTab(id) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  event.currentTarget.classList.add('active');
+
+  if (id === 'busca' && _nomesRef.length === 0) {
+    fetch('/api/nomes-ref').then(r => r.json()).then(d => {
+      _nomesRef = d.nomes || [];
+      populateDatalist();
+    });
+  }
+}
+
+function populateDatalist() {
+  const dl = document.getElementById('nomes-ref-list');
+  dl.innerHTML = _nomesRef.map(n => `<option value="${n}">`).join('');
+}
+
+// ────────────────────────────────────────────────
+// Configuração
+// ────────────────────────────────────────────────
+async function selecionarPastaRaiz() {
+  showLoading('Abrindo seletor de pasta...');
+  const r = await fetch('/api/browse-folder', {method:'POST'}).then(x => x.json()).catch(() => ({path:''}));
+  hideLoading();
+  if (!r.path) return;
+
+  showLoading('Lendo subpastas e PDFs...');
+  const res = await post('/api/set-pasta-raiz', {path: r.path});
+  hideLoading();
+  if (!res.ok) return toast(res.erro, 'error');
+
+  document.getElementById('info-pasta-raiz').textContent = r.path;
+  document.getElementById('info-pasta-raiz').classList.add('filled');
+  const infoEl = document.getElementById('info-pdfs');
+  infoEl.textContent = `📂 ${res.subpastas} subpastas  |  📄 ${res.total_pdfs} PDFs válidos`;
+  infoEl.style.display = 'block';
+  document.getElementById('dot-config').classList.add('ok');
+  toast(`Pasta raiz configurada! ${res.subpastas} subpastas, ${res.total_pdfs} PDFs.`, 'success');
+}
+
+async function carregarPlanilha() {
+  showLoading('Abrindo seletor de arquivo...');
+  const res = await post('/api/load-planilha-ref', {});
+  hideLoading();
+  if (!res.ok) return toast(res.erro || 'Erro ao carregar planilha', 'error');
+
+  _nomesRef = res.preview;
+  populateDatalist();
+
+  document.getElementById('info-planilha').textContent = res.arquivos.join(', ');
+  document.getElementById('info-planilha').classList.add('filled');
+  const infoNomes = document.getElementById('info-nomes');
+  infoNomes.textContent = `✅ ${res.total} nomes carregados`;
+  infoNomes.style.display = 'block';
+
+  // Preview
+  document.getElementById('preview-nomes').style.display = 'block';
+  document.getElementById('preview-count').textContent = `(${res.total} nomes — mostrando primeiros 40)`;
+  const list = document.getElementById('preview-list');
+  list.innerHTML = (res.preview || []).map(n => `<span class="badge badge-purple">${n}</span>`).join('');
+
+  toast(`${res.total} nomes carregados de ${res.arquivos.length} planilha(s).`, 'success');
+}
+
+// ────────────────────────────────────────────────
+// Análise
+// ────────────────────────────────────────────────
+async function analisar() {
+  showLoading('Analisando PDFs e comparando com referência...');
+  const res = await post('/api/analisar', {});
+  hideLoading();
+  if (!res.ok) return toast(res.erro, 'error');
+
+  _analise = res;
+  _duvidasDecisoes = {};
+
+  document.getElementById('stat-corretos').textContent = res.corretos;
+  document.getElementById('stat-auto').textContent = res.rename_auto;
+  document.getElementById('stat-duvidas').textContent = res.duvidas;
+  document.getElementById('stat-sem').textContent = res.sem_match;
+  document.getElementById('analise-result').style.display = 'block';
+
+  // Rename auto
+  if (res.rename_auto > 0) {
+    document.getElementById('section-auto').style.display = 'block';
+    const listAuto = document.getElementById('list-auto');
+    listAuto.innerHTML = (res.rename_auto_data || []).map(it => `
+      <div class="rename-item">
+        <span class="pasta-tag">📂 ${it.pasta}</span>
+        <span class="curr">${it.arquivo}</span>
+        <span class="arrow">→</span>
+        <span class="ref">${it.nome_ref}.pdf</span>
+        <span class="badge badge-blue">${Math.round(it.razao * 100)}%</span>
+      </div>`).join('');
+  }
+
+  // Dúvidas
+  if (res.duvidas > 0) {
+    document.getElementById('section-duvidas').style.display = 'block';
+    const listDuv = document.getElementById('list-duvidas');
+    listDuv.innerHTML = (res.duvidas_data || []).map((it, idx) => `
+      <div class="duvida-card" id="duv-${idx}">
+        <div>
+          <div class="duvida-curr">📄 ${it.arquivo}</div>
+          <div class="duvida-meta">📂 ${it.pasta} — Sugestão: <span class="duvida-ref">${it.nome_ref}</span></div>
+          <span class="badge badge-yellow">${Math.round(it.razao*100)}% similaridade</span>
+        </div>
+        <div class="duvida-btns">
+          <button class="btn btn-green btn-sm" onclick="decidirDuvida(${idx}, 'sim', ${JSON.stringify(it).replace(/"/g,'&quot;')})">✅ SIM</button>
+          <button class="btn btn-red btn-sm" onclick="decidirDuvida(${idx}, 'nao', null)">❌ NÃO</button>
+        </div>
+      </div>`).join('');
+  }
+
+  // Sem match
+  if (res.sem_match > 0) {
+    document.getElementById('section-sem').style.display = 'block';
+    const listSem = document.getElementById('list-sem');
+    listSem.innerHTML = (res.sem_match_data || []).map(it => `
+      <div class="sem-match-item">
+        <div>${it.arquivo}</div>
+        <div class="sm-pasta">📂 ${it.pasta}</div>
+      </div>`).join('');
+  }
+
+  const total = res.rename_auto + res.duvidas;
+  document.getElementById('exec-status').textContent =
+    `${res.rename_auto} automáticos + ${res.duvidas} aguardando sua confirmação`;
+  toast(`Análise concluída! ${res.rename_auto} para renomear automaticamente, ${res.duvidas} dúvidas.`, 'success');
+}
+
+function decidirDuvida(idx, decisao, itemData) {
+  _duvidasDecisoes[idx] = { decisao, itemData };
+  const card = document.getElementById(`duv-${idx}`);
+  card.classList.remove('sim', 'nao');
+  card.classList.add(decisao);
+  const total = Object.values(_duvidasDecisoes).filter(d => d.decisao === 'sim').length;
+  document.getElementById('exec-status').textContent =
+    `${(_analise?.rename_auto||0)} automáticos + ${total} dúvidas confirmadas → prontos para executar`;
+}
+
+// ────────────────────────────────────────────────
+// Executar
+// ────────────────────────────────────────────────
+async function executar() {
+  const items = [];
+
+  // Automáticos
+  for (const it of (_analise?.rename_auto_data || [])) {
+    items.push({ pasta_path: it.pasta_path, arquivo: it.arquivo, nome_ref: it.nome_ref });
+  }
+
+  // Dúvidas confirmadas com SIM
+  for (const [idx, d] of Object.entries(_duvidasDecisoes)) {
+    if (d.decisao === 'sim' && d.itemData) {
+      items.push({ pasta_path: d.itemData.pasta_path, arquivo: d.itemData.arquivo, nome_ref: d.itemData.nome_ref });
+    }
+  }
+
+  if (items.length === 0) {
+    return toast('Nenhum item para executar. Confirme dúvidas com SIM primeiro.', 'info');
+  }
+
+  showLoading(`Renomeando ${items.length} arquivo(s)...`);
+  const res = await post('/api/executar', { items });
+  hideLoading();
+
+  if (!res.ok) return toast('Erro ao executar renomeações', 'error');
+  showModalResultados(res.resultados);
+}
+
+function showModalResultados(resultados) {
+  const classMap = { ok: 'r-ok', excluido: 'r-excluido', conflito: 'r-conflito', erro: 'r-erro', igual: 'r-ok' };
+  const emojiMap = { ok: '✅', excluido: '🗑️', conflito: '⚠️', erro: '❌', igual: '✓' };
+  document.getElementById('modal-title').textContent = `Resultados (${resultados.length} arquivos)`;
+  document.getElementById('modal-body').innerHTML = `
+    <div class="result-list">
+      ${resultados.map(r => `
+        <div class="result-row ${classMap[r.status]||''}">
+          <span>${emojiMap[r.status]||'?'}</span>
+          <span style="flex:1;font-weight:500;">${r.arquivo}</span>
+          <span class="text-sm" style="flex-shrink:0;color:var(--text2);">${r.pasta||''}</span>
+          <span class="text-sm" style="flex:0 0 200px;">${r.msg}</span>
+        </div>`).join('')}
+    </div>`;
+  document.getElementById('modal').classList.add('show');
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('show');
+}
+
+// ────────────────────────────────────────────────
+// Busca
+// ────────────────────────────────────────────────
+let _searchTimer = null;
+function debounceSearch() {
+  clearTimeout(_searchTimer);
+  _searchTimer = setTimeout(buscar, 500);
+}
+
+async function buscar() {
+  const termo = document.getElementById('search-input').value.trim();
+  if (!termo || termo.length < 3) return;
+
+  showLoading('Buscando...');
+  const res = await post('/api/buscar', { termo });
+  hideLoading();
+
+  const container = document.getElementById('search-results');
+  if (!res.ok) {
+    container.innerHTML = `<div class="card"><p class="text-sm" style="color:var(--red)">${res.erro}</p></div>`;
+    return;
+  }
+
+  if (res.resultados.length === 0) {
+    container.innerHTML = `<div class="card"><p class="text-sm">Nenhum PDF encontrado para "<strong>${termo}</strong>".</p></div>`;
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="text-sm" style="margin-bottom:12px; color:var(--text2);">
+      ${res.resultados.length} resultado(s) para "<strong style="color:var(--text)">${termo}</strong>"
+    </div>
+    ${res.resultados.map((r, idx) => buildResultCard(r, idx)).join('')}`;
+}
+
+function buildResultCard(r, idx) {
+  const pct = Math.round(r.razao * 100);
+  const simClass = pct >= 80 ? 'sim-high' : pct >= 60 ? 'sim-mid' : 'sim-low';
+  return `
+    <div class="result-card">
+      <div class="result-head">
+        <div>
+          <div class="result-name">📄 ${r.stem}</div>
+          <div class="result-meta">📂 ${r.pasta} &nbsp;|&nbsp; arquivo: ${r.arquivo}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span class="sim-pct ${simClass}">${pct}%</span>
+          <button class="btn btn-outline btn-sm" onclick="toggleRenameForm(${idx})">✏️ Renomear</button>
+        </div>
+      </div>
+      <div class="rename-form" id="form-${idx}">
+        <label>Novo nome (sem .pdf):</label>
+        <div class="rename-row">
+          <input type="text" id="input-rename-${idx}"
+                 value="${r.stem}"
+                 list="nomes-ref-list"
+                 placeholder="Digite o nome correto..." />
+          <button class="btn btn-green btn-sm" onclick="confirmarRename(${idx}, '${escape(r.pasta_path)}', '${escape(r.arquivo)}')">
+            ✅ Confirmar
+          </button>
+          <button class="btn btn-outline btn-sm" onclick="toggleRenameForm(${idx})">Cancelar</button>
+        </div>
+        <p class="text-sm mt-8">💡 Os nomes da sua planilha de referência aparecem como sugestão no campo acima.</p>
+      </div>
+    </div>`;
+}
+
+function toggleRenameForm(idx) {
+  const form = document.getElementById(`form-${idx}`);
+  form.classList.toggle('open');
+  if (form.classList.contains('open')) {
+    document.getElementById(`input-rename-${idx}`).focus();
+  }
+}
+
+async function confirmarRename(idx, pastaPathEsc, arquivoEsc) {
+  const pastaPath = unescape(pastaPathEsc);
+  const arquivo = unescape(arquivoEsc);
+  const novoNome = document.getElementById(`input-rename-${idx}`).value.trim();
+  if (!novoNome) return toast('Digite o novo nome', 'error');
+
+  const res = await post('/api/renomear', { pasta_path: pastaPath, arquivo, novo_nome: novoNome });
+  if (!res.ok) return toast(res.erro, 'error');
+
+  toast(`✅ Renomeado para: ${res.novo_nome}`, 'success');
+  // Atualiza o card visualmente
+  const card = document.getElementById(`form-${idx}`).closest('.result-card');
+  card.style.opacity = '0.5';
+  card.querySelector('.result-name').textContent = `📄 ${novoNome} ✅`;
+  card.querySelector('.rename-form').classList.remove('open');
+}
+
+// ────────────────────────────────────────────────
+// Accordion
+// ────────────────────────────────────────────────
+function toggleAccordion(id) {
+  const body = document.getElementById(id);
+  const arrow = document.getElementById('arrow-' + id);
+  body.classList.toggle('open');
+  arrow.classList.toggle('open');
+}
+
+// ────────────────────────────────────────────────
+// Utilities
+// ────────────────────────────────────────────────
+async function post(url, data) {
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return await r.json();
+  } catch (e) {
+    return { ok: false, erro: 'Erro de conexão com o servidor' };
+  }
+}
+
+function showLoading(msg) {
+  document.getElementById('loading-msg').textContent = msg || 'Processando...';
+  document.getElementById('loading').classList.add('show');
+}
+function hideLoading() {
+  document.getElementById('loading').classList.remove('show');
+}
+
+function toast(msg, tipo='info') {
+  const el = document.createElement('div');
+  el.className = `toast toast-${tipo}`;
+  el.textContent = msg;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => el.remove(), 4500);
+}
+
+function escape(s) { return encodeURIComponent(s); }
+function unescape(s) { return decodeURIComponent(s); }
+</script>
+
+</body>
+</html>
