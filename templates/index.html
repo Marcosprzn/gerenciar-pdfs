@@ -340,6 +340,14 @@
 
     <div class="card" id="card-analisar">
       <p class="text-sm" style="margin-bottom:14px;">Compara cada PDF das subpastas com os nomes da pasta de referência e agrupa por pessoa para você aprovar.</p>
+      
+      <div class="flex-row" style="margin-bottom:16px;">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; color:var(--text); font-size:13px; font-weight:500;">
+          <input type="checkbox" id="chk-ignorar-acentos" style="width:16px;height:16px;accent-color:var(--purple);" />
+          Ocultar divergências apenas de acentuação (ex: JOAO e JOÃO)
+        </label>
+      </div>
+
       <button class="btn btn-primary" id="btn-analisar" onclick="analisar()">
         🔍 Gerar Sugestões
       </button>
@@ -474,8 +482,9 @@ async function selecionarPastaRef() {
 let _gruposSugestoes = {};
 
 async function analisar() {
+  const ignorar_acentos = document.getElementById('chk-ignorar-acentos').checked;
   showLoading('Gerando sugestões...');
-  const res = await post('/api/analisar', {});
+  const res = await post('/api/analisar', { ignorar_acentos });
   hideLoading();
   if (!res.ok) return toast(res.erro, 'error');
 

@@ -116,12 +116,14 @@ def buscar_todos_pdfs(pasta_raiz):
             })
     return result
 
-def encontrar_match_ref(nome_norm, nome_stem, nomes_ref):
+def encontrar_match_ref(nome_norm, nome_stem, nomes_ref, ignorar_acentos=False):
     """Retorna (nome_ref, tipo, razao). Tipos: correto|rename_auto|duvida|sem_match"""
     # 1. Exata
     for ref in nomes_ref:
         if normalizar(ref) == nome_norm:
-            return ref, ('correto' if ref == nome_stem else 'rename_auto'), 1.0
+            if ignorar_acentos or ref == nome_stem:
+                return ref, 'correto', 1.0
+            return ref, 'rename_auto', 1.0
 
     # 2. Abreviação
     melhor = None; best_diff = 9999
@@ -218,6 +220,7 @@ def analisar():
     if not _state['nomes_ref']:
         return jsonify({'ok': False, 'erro': 'Carregue a pasta de referência primeiro'})
 
+    ignorar_acentos = request.json.get('ignorar_acentos', False)
     pdfs = buscar_todos_pdfs(_state['pasta_raiz'])
     nomes_ref = _state['nomes_ref']
     corretos = []; rename_auto = []; duvidas = []; sem_match = []
@@ -227,7 +230,7 @@ def analisar():
         if eh_homonimo(sem_ext):
             corretos.append({**pdf, 'nome_ref': pdf['stem'], 'tipo': 'homonimo', 'razao': 1.0})
             continue
-        ref, tipo, razao = encontrar_match_ref(pdf['nome_norm'], pdf['stem'], nomes_ref)
+        ref, tipo, razao = encontrar_match_ref(pdf['nome_norm'], pdf['stem'], nomes_ref, ignorar_acentos)
         entry = {**pdf, 'nome_ref': ref, 'tipo': tipo, 'razao': razao}
         if tipo == 'correto':
             corretos.append(entry)
