@@ -263,7 +263,7 @@
       <span class="status-dot" id="dot-config"></span> ⚙️ Configuração
     </button>
     <button class="tab-btn" onclick="showTab('correcao')">
-      🔄 Correção em Massa
+      💡 Sugestões Inteligentes
     </button>
     <button class="tab-btn" onclick="showTab('busca')">
       🔍 Buscar Pessoa
@@ -313,13 +313,13 @@
         <div id="info-pdfs" class="text-sm" style="display:none;"></div>
       </div>
 
-      <!-- Planilha de referência -->
+      <!-- Pasta de Referência -->
       <div class="config-box">
-        <h3>📊 Planilha de Referência</h3>
-        <p class="text-sm">Selecione a planilha com os nomes já conferidos e corretos (lê a coluna D — NOMES). Pode selecionar múltiplas planilhas.</p>
-        <div class="config-info" id="info-planilha">Nenhuma planilha carregada</div>
-        <button class="btn btn-primary" onclick="carregarPlanilha()">
-          📊 Selecionar Planilha(s)
+        <h3>📁 Pasta de Referência</h3>
+        <p class="text-sm">Selecione a pasta onde os nomes dos PDFs já estão conferidos e corretos (esta será a base).</p>
+        <div class="config-info" id="info-pasta-ref">Nenhuma pasta selecionada</div>
+        <button class="btn btn-primary" onclick="selecionarPastaRef()">
+          📁 Selecionar Pasta Base
         </button>
         <div id="info-nomes" class="text-sm" style="display:none;"></div>
       </div>
@@ -327,83 +327,28 @@
 
     <!-- Preview de nomes -->
     <div id="preview-nomes" class="card mt-16" style="display:none;">
-      <div class="card-title">📋 Nomes carregados <small id="preview-count"></small></div>
+      <div class="card-title">📋 Nomes extraídos da referência <small id="preview-count"></small></div>
       <div id="preview-list" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
     </div>
   </div>
 
-  <!-- ═══ Tab 2: Correção em Massa ══════════════════════════ -->
+  <!-- ═══ Tab 2: Sugestões Inteligentes ══════════════════════════ -->
   <div id="tab-correcao" class="tab-panel">
     <div class="card-title" style="font-size:20px; margin-bottom:20px;">
-      🔄 Correção em Massa
+      💡 Sugestões Inteligentes
     </div>
 
     <div class="card" id="card-analisar">
-      <p class="text-sm" style="margin-bottom:14px;">Compara cada PDF das subpastas com os nomes da planilha de referência e identifica divergências para corrigir.</p>
+      <p class="text-sm" style="margin-bottom:14px;">Compara cada PDF das subpastas com os nomes da pasta de referência e agrupa por pessoa para você aprovar.</p>
       <button class="btn btn-primary" id="btn-analisar" onclick="analisar()">
-        🔍 Analisar PDFs
+        🔍 Gerar Sugestões
       </button>
     </div>
 
     <!-- Resultados da análise -->
     <div id="analise-result" style="display:none;">
-
-      <!-- Stats -->
-      <div class="stat-row">
-        <div class="stat-box">
-          <div class="stat-num" style="color:var(--green)" id="stat-corretos">0</div>
-          <div class="stat-label">✅ Corretos</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-num" style="color:var(--blue)" id="stat-auto">0</div>
-          <div class="stat-label">🔄 Rename automático</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-num" style="color:var(--yellow)" id="stat-duvidas">0</div>
-          <div class="stat-label">❓ Dúvidas</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-num" style="color:var(--red)" id="stat-sem">0</div>
-          <div class="stat-label">❌ Sem match</div>
-        </div>
-      </div>
-
-      <!-- Rename automático -->
-      <div id="section-auto" style="display:none;">
-        <div class="accordion-header" onclick="toggleAccordion('acc-auto')">
-          <span>🔄 Renomeação Automática (alta confiança)</span>
-          <span class="accordion-arrow" id="arrow-acc-auto">▼</span>
-        </div>
-        <div class="accordion-body" id="acc-auto">
-          <div id="list-auto"></div>
-        </div>
-      </div>
-
-      <!-- Dúvidas -->
-      <div id="section-duvidas" style="display:none; margin-top:16px;">
-        <div class="section-title">❓ Dúvidas — confirme cada caso</div>
-        <div id="list-duvidas"></div>
-      </div>
-
-      <!-- Sem match -->
-      <div id="section-sem" style="display:none; margin-top:16px;">
-        <div class="accordion-header" onclick="toggleAccordion('acc-sem')">
-          <span>❌ Sem correspondência na referência</span>
-          <span class="accordion-arrow" id="arrow-acc-sem">▼</span>
-        </div>
-        <div class="accordion-body" id="acc-sem">
-          <div id="list-sem"></div>
-        </div>
-      </div>
-
-      <div class="divider"></div>
-
-      <div class="flex-row" style="justify-content:space-between; flex-wrap:wrap; gap:10px;">
-        <div class="text-sm" id="exec-status">Confirme as dúvidas acima e clique em Executar</div>
-        <button class="btn btn-green" id="btn-executar" onclick="executar()">
-          ▶️ Executar Correções
-        </button>
-      </div>
+      <div class="text-sm" id="exec-status" style="margin-bottom: 16px; color: var(--text2);"></div>
+      <div id="sugestoes-list" style="display:flex; flex-direction:column; gap:16px;"></div>
     </div>
   </div>
 
@@ -494,19 +439,24 @@ async function selecionarPastaRaiz() {
   toast(`Pasta raiz configurada! ${res.subpastas} subpastas, ${res.total_pdfs} PDFs.`, 'success');
 }
 
-async function carregarPlanilha() {
-  showLoading('Abrindo seletor de arquivo...');
-  const res = await post('/api/load-planilha-ref', {});
+async function selecionarPastaRef() {
+  showLoading('Abrindo seletor de pasta...');
+  const r = await fetch('/api/browse-folder', {method:'POST'}).then(x => x.json()).catch(() => ({path:''}));
   hideLoading();
-  if (!res.ok) return toast(res.erro || 'Erro ao carregar planilha', 'error');
+  if (!r.path) return;
 
-  _nomesRef = res.preview;
+  showLoading('Lendo PDFs da referência...');
+  const res = await post('/api/set-pasta-ref', {path: r.path});
+  hideLoading();
+  if (!res.ok) return toast(res.erro || 'Erro ao carregar pasta de referência', 'error');
+
+  _nomesRef = res.preview; // Apenas para o preview inicial, o backend armazena todos
   populateDatalist();
 
-  document.getElementById('info-planilha').textContent = res.arquivos.join(', ');
-  document.getElementById('info-planilha').classList.add('filled');
+  document.getElementById('info-pasta-ref').textContent = res.pasta;
+  document.getElementById('info-pasta-ref').classList.add('filled');
   const infoNomes = document.getElementById('info-nomes');
-  infoNomes.textContent = `✅ ${res.total} nomes carregados`;
+  infoNomes.textContent = `✅ ${res.total} nomes extraídos`;
   infoNomes.style.display = 'block';
 
   // Preview
@@ -515,114 +465,115 @@ async function carregarPlanilha() {
   const list = document.getElementById('preview-list');
   list.innerHTML = (res.preview || []).map(n => `<span class="badge badge-purple">${n}</span>`).join('');
 
-  toast(`${res.total} nomes carregados de ${res.arquivos.length} planilha(s).`, 'success');
+  toast(`${res.total} nomes carregados da pasta de referência.`, 'success');
 }
 
 // ────────────────────────────────────────────────
-// Análise
+// Análise e Sugestões
 // ────────────────────────────────────────────────
+let _gruposSugestoes = {};
+
 async function analisar() {
-  showLoading('Analisando PDFs e comparando com referência...');
+  showLoading('Gerando sugestões...');
   const res = await post('/api/analisar', {});
   hideLoading();
   if (!res.ok) return toast(res.erro, 'error');
 
   _analise = res;
-  _duvidasDecisoes = {};
+  _gruposSugestoes = {};
 
-  document.getElementById('stat-corretos').textContent = res.corretos;
-  document.getElementById('stat-auto').textContent = res.rename_auto;
-  document.getElementById('stat-duvidas').textContent = res.duvidas;
-  document.getElementById('stat-sem').textContent = res.sem_match;
+  // Agrupar 'rename_auto' e 'duvidas' por nome_ref
+  const agrupar = (lista) => {
+    (lista || []).forEach(it => {
+      if (!_gruposSugestoes[it.nome_ref]) _gruposSugestoes[it.nome_ref] = [];
+      _gruposSugestoes[it.nome_ref].push(it);
+    });
+  };
+  agrupar(res.rename_auto_data);
+  agrupar(res.duvidas_data);
+
+  const container = document.getElementById('sugestoes-list');
+  container.innerHTML = '';
   document.getElementById('analise-result').style.display = 'block';
 
-  // Rename auto
-  if (res.rename_auto > 0) {
-    document.getElementById('section-auto').style.display = 'block';
-    const listAuto = document.getElementById('list-auto');
-    listAuto.innerHTML = (res.rename_auto_data || []).map(it => `
-      <div class="rename-item">
-        <span class="pasta-tag">📂 ${it.pasta}</span>
-        <span class="curr">${it.arquivo}</span>
-        <span class="arrow">→</span>
-        <span class="ref">${it.nome_ref}.pdf</span>
-        <span class="badge badge-blue">${Math.round(it.razao * 100)}%</span>
-      </div>`).join('');
+  const chaves = Object.keys(_gruposSugestoes).sort();
+  if (chaves.length === 0) {
+    document.getElementById('exec-status').innerHTML = '<span style="color:var(--green)">Nenhuma divergência encontrada! Tudo parece correto.</span>';
+    return;
   }
 
-  // Dúvidas
-  if (res.duvidas > 0) {
-    document.getElementById('section-duvidas').style.display = 'block';
-    const listDuv = document.getElementById('list-duvidas');
-    listDuv.innerHTML = (res.duvidas_data || []).map((it, idx) => `
-      <div class="duvida-card" id="duv-${idx}">
-        <div>
-          <div class="duvida-curr">📄 ${it.arquivo}</div>
-          <div class="duvida-meta">📂 ${it.pasta} — Sugestão: <span class="duvida-ref">${it.nome_ref}</span></div>
-          <span class="badge badge-yellow">${Math.round(it.razao*100)}% similaridade</span>
+  let html = '';
+  chaves.forEach((nomeRef, gIdx) => {
+    const itens = _gruposSugestoes[nomeRef];
+    html += `
+      <div class="card" id="sugestao-card-${gIdx}" style="border-color: rgba(16,185,129,0.3);">
+        <div class="flex-row" style="justify-content:space-between; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+          <div>
+            <div style="font-size:12px; color:var(--text2);">Sugestão:</div>
+            <div style="font-size:16px; font-weight:700; color:var(--green);">${nomeRef}</div>
+          </div>
+          <button class="btn btn-green" onclick="aprovarGrupo('${escape(nomeRef)}', ${gIdx})">
+            ✅ Aprovar Sugestão (${itens.length} arquivos)
+          </button>
         </div>
-        <div class="duvida-btns">
-          <button class="btn btn-green btn-sm" onclick="decidirDuvida(${idx}, 'sim', ${JSON.stringify(it).replace(/"/g,'&quot;')})">✅ SIM</button>
-          <button class="btn btn-red btn-sm" onclick="decidirDuvida(${idx}, 'nao', null)">❌ NÃO</button>
+        <div style="background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:10px;">
+          ${itens.map((it, iIdx) => {
+            const pct = Math.round(it.razao * 100);
+            return `
+            <div class="flex-row" style="padding:6px 0; border-bottom:1px solid var(--border); font-size:13px; align-items:flex-start;">
+              <input type="checkbox" checked id="chk-${gIdx}-${iIdx}" style="margin-top:3px;">
+              <div style="flex:1;">
+                <div>📄 ${it.arquivo}</div>
+                <div style="color:var(--text2); font-size:11px;">📂 ${it.pasta}</div>
+              </div>
+              <span class="badge ${pct >= 80 ? 'badge-blue' : 'badge-yellow'}">${pct}%</span>
+            </div>`;
+          }).join('')}
         </div>
-      </div>`).join('');
-  }
+      </div>
+    `;
+  });
 
-  // Sem match
-  if (res.sem_match > 0) {
-    document.getElementById('section-sem').style.display = 'block';
-    const listSem = document.getElementById('list-sem');
-    listSem.innerHTML = (res.sem_match_data || []).map(it => `
-      <div class="sem-match-item">
-        <div>${it.arquivo}</div>
-        <div class="sm-pasta">📂 ${it.pasta}</div>
-      </div>`).join('');
-  }
-
-  const total = res.rename_auto + res.duvidas;
-  document.getElementById('exec-status').textContent =
-    `${res.rename_auto} automáticos + ${res.duvidas} aguardando sua confirmação`;
-  toast(`Análise concluída! ${res.rename_auto} para renomear automaticamente, ${res.duvidas} dúvidas.`, 'success');
+  container.innerHTML = html;
+  document.getElementById('exec-status').textContent = `Encontradas sugestões de correção para ${chaves.length} pessoas.`;
+  toast(`Análise concluída! ${chaves.length} grupos sugeridos.`, 'success');
 }
 
-function decidirDuvida(idx, decisao, itemData) {
-  _duvidasDecisoes[idx] = { decisao, itemData };
-  const card = document.getElementById(`duv-${idx}`);
-  card.classList.remove('sim', 'nao');
-  card.classList.add(decisao);
-  const total = Object.values(_duvidasDecisoes).filter(d => d.decisao === 'sim').length;
-  document.getElementById('exec-status').textContent =
-    `${(_analise?.rename_auto||0)} automáticos + ${total} dúvidas confirmadas → prontos para executar`;
-}
+async function aprovarGrupo(nomeRefEsc, gIdx) {
+  const nomeRef = unescape(nomeRefEsc);
+  const itensIniciais = _gruposSugestoes[nomeRef];
+  const itemsParaExecutar = [];
 
-// ────────────────────────────────────────────────
-// Executar
-// ────────────────────────────────────────────────
-async function executar() {
-  const items = [];
-
-  // Automáticos
-  for (const it of (_analise?.rename_auto_data || [])) {
-    items.push({ pasta_path: it.pasta_path, arquivo: it.arquivo, nome_ref: it.nome_ref });
-  }
-
-  // Dúvidas confirmadas com SIM
-  for (const [idx, d] of Object.entries(_duvidasDecisoes)) {
-    if (d.decisao === 'sim' && d.itemData) {
-      items.push({ pasta_path: d.itemData.pasta_path, arquivo: d.itemData.arquivo, nome_ref: d.itemData.nome_ref });
+  itensIniciais.forEach((it, iIdx) => {
+    const chk = document.getElementById(`chk-${gIdx}-${iIdx}`);
+    if (chk && chk.checked) {
+      itemsParaExecutar.push({
+        pasta_path: it.pasta_path,
+        arquivo: it.arquivo,
+        nome_ref: nomeRef
+      });
     }
-  }
+  });
 
-  if (items.length === 0) {
-    return toast('Nenhum item para executar. Confirme dúvidas com SIM primeiro.', 'info');
-  }
+  if (itemsParaExecutar.length === 0) return toast('Nenhum arquivo marcado neste grupo.', 'info');
 
-  showLoading(`Renomeando ${items.length} arquivo(s)...`);
-  const res = await post('/api/executar', { items });
+  showLoading(`Renomeando ${itemsParaExecutar.length} arquivos...`);
+  const res = await post('/api/executar', { items: itemsParaExecutar });
   hideLoading();
 
-  if (!res.ok) return toast('Erro ao executar renomeações', 'error');
+  if (!res.ok) return toast('Erro ao executar', 'error');
+
   showModalResultados(res.resultados);
+
+  // Remove o card da tela
+  const card = document.getElementById(`sugestao-card-${gIdx}`);
+  if (card) {
+    card.style.opacity = '0.4';
+    card.style.pointerEvents = 'none';
+    card.querySelector('.btn-green').textContent = '✅ Concluído';
+    card.querySelector('.btn-green').classList.remove('btn-green');
+    card.querySelector('.btn').classList.add('btn-outline');
+  }
 }
 
 function showModalResultados(resultados) {

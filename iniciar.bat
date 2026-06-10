@@ -6,7 +6,7 @@ echo ================================================
 echo.
 cd /d "%~dp0"
 
-python -c "import flask, pandas, openpyxl, xlrd" 2>nul
+python -c "import flask" 2>nul
 if errorlevel 1 (
     echo Instalando dependencias necessarias pela primeira vez... aguarde.
     pip install -r requirements.txt -q

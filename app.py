@@ -6,7 +6,6 @@ Flask web app para corrigir nomes de PDFs usando planilhas de referência.
 from flask import Flask, render_template, request, jsonify
 import os, re, unicodedata, datetime
 from difflib import SequenceMatcher
-import pandas as pd
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -86,29 +85,17 @@ def verificar_abreviacao(a, b):
         else: i += 1; j += 1
     return mc >= max(len(ta), len(tb)) - 1
 
-def ler_nomes_planilha(caminho):
-    ext = os.path.splitext(caminho)[1].lower()
-    engine = 'odf' if ext == '.ods' else None
-    ignorar = {'NOMES', 'NOME', 'TITULAR', 'FUNCIONARIO', 'PIS', 'PROC.', 'DATA', 'OBS', 'TOTAL', 'TOTAIS', 'SUBTOTAL'}
-    try:
-        try:
-            df = pd.read_excel(caminho, sheet_name='FGTS EM ATRASO - PROCESSOS', header=None, engine=engine)
-        except Exception:
-            df = pd.read_excel(caminho, header=None, engine=engine)
-        nomes = []
-        for i in range(len(df)):
-            if df.shape[1] <= 3: continue
-            val = df.iloc[i, 3]
-            if not isinstance(val, str): continue
-            t = val.strip().upper()
-            if t in ignorar or len(t) <= 5 or ' ' not in t: continue
-            n = normalizar(t)
-            if n and n not in nomes:
-                nomes.append(n)
-        return nomes
-    except Exception as e:
-        print(f'  [ERRO planilha] {caminho}: {e}')
-        return []
+def ler_nomes_pasta_ref(pasta):
+    nomes = []
+    if not pasta or not os.path.isdir(pasta): return nomes
+    for f in os.listdir(pasta):
+        if not eh_pdf_valido(f): continue
+        stem, _ = extrair_variante(os.path.splitext(f)[0])
+        if eh_homonimo(stem): continue
+        n = normalizar(stem)
+        if n and n not in nomes:
+            nomes.append(n)
+    return nomes
 
 def buscar_todos_pdfs(pasta_raiz):
     result = []
@@ -204,19 +191,18 @@ def set_pasta_raiz():
     total = sum(len([f for f in os.listdir(os.path.join(p, d)) if eh_pdf_valido(f)]) for d in subs)
     return jsonify({'ok': True, 'pasta': p, 'subpastas': len(subs), 'total_pdfs': total})
 
-@app.route('/api/load-planilha-ref', methods=['POST'])
-def load_planilha_ref():
-    files = abrir_arquivos()
-    if not files:
-        return jsonify({'ok': False, 'erro': 'Nenhuma planilha selecionada'})
-    nomes = []
-    for f in files:
-        nomes += ler_nomes_planilha(f)
-    nomes = list(dict.fromkeys(nomes))
+@app.route('/api/set-pasta-ref', methods=['POST'])
+def set_pasta_ref():
+    p = request.json.get('path', '')
+    if not p or not os.path.isdir(p):
+        return jsonify({'ok': False, 'erro': 'Pasta de referência inválida ou não encontrada'})
+    nomes = ler_nomes_pasta_ref(p)
+    if not nomes:
+        return jsonify({'ok': False, 'erro': 'Nenhum nome válido (PDF) encontrado na pasta'})
     _state['nomes_ref'] = nomes
     return jsonify({
         'ok': True,
-        'arquivos': [os.path.basename(f) for f in files],
+        'pasta': p,
         'total': len(nomes),
         'preview': nomes[:40],
     })
@@ -230,7 +216,7 @@ def analisar():
     if not _state['pasta_raiz']:
         return jsonify({'ok': False, 'erro': 'Selecione a pasta raiz primeiro'})
     if not _state['nomes_ref']:
-        return jsonify({'ok': False, 'erro': 'Carregue a planilha de referência primeiro'})
+        return jsonify({'ok': False, 'erro': 'Carregue a pasta de referência primeiro'})
 
     pdfs = buscar_todos_pdfs(_state['pasta_raiz'])
     nomes_ref = _state['nomes_ref']
