@@ -4,8 +4,10 @@ Gerenciador de PDFs — Renomeação por Planilha
 Flask web app para corrigir nomes de PDFs usando planilhas de referência.
 """
 from flask import Flask, render_template, request, jsonify
-import os, re, unicodedata, datetime
+import os, re, unicodedata, datetime, json
 from difflib import SequenceMatcher
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -16,9 +18,62 @@ app.secret_key = 'gerenciador_pdfs_2024'
 # ─── Estado global (app local, single-user) ────────────────────────────
 _state = {
     'pasta_raiz': '',
-    'nomes_ref': [],      # nomes normalizados da planilha de referência
+    'pastas_ref': [],
+    'nomes_ref': [],      # nomes normalizados de todas as pastas de referência
     'analise': None,
+    'needs_update': False
 }
+
+HISTORICO_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'historico.json')
+
+def load_historico():
+    if os.path.exists(HISTORICO_FILE):
+        try:
+            with open(HISTORICO_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return []
+
+def save_historico(h):
+    try:
+        with open(HISTORICO_FILE, 'w', encoding='utf-8') as f:
+            json.dump(h, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"Erro salvando histórico: {e}")
+
+def add_historico(acao, arquivo_original, novo_nome, pasta, status, msg=""):
+    h = load_historico()
+    h.append({
+        'data': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'acao': acao,
+        'arquivo_original': arquivo_original,
+        'novo_nome': novo_nome,
+        'pasta': pasta,
+        'status': status,
+        'msg': msg
+    })
+    # Keep last 1000
+    if len(h) > 1000: h = h[-1000:]
+    save_historico(h)
+
+class PDFWatcher(FileSystemEventHandler):
+    def on_any_event(self, event):
+        if event.is_directory: return
+        p1 = getattr(event, 'src_path', '').lower()
+        p2 = getattr(event, 'dest_path', '').lower()
+        if p1.endswith('.pdf') or p2.endswith('.pdf'):
+            _state['needs_update'] = True
+
+observer = None
+def setup_watchdog(path):
+    global observer
+    if observer:
+        observer.stop()
+        observer.join()
+    observer = Observer()
+    observer.schedule(PDFWatcher(), path, recursive=True)
+    observer.start()
 
 # ─── Constantes ────────────────────────────────────────────────────────
 EXCLUIR_PADROES = [
@@ -191,27 +246,55 @@ def set_pasta_raiz():
     _state['pasta_raiz'] = p
     subs = [d for d in os.listdir(p) if os.path.isdir(os.path.join(p, d))]
     total = sum(len([f for f in os.listdir(os.path.join(p, d)) if eh_pdf_valido(f)]) for d in subs)
+    
+    setup_watchdog(p)
+    _state['needs_update'] = False
+    
     return jsonify({'ok': True, 'pasta': p, 'subpastas': len(subs), 'total_pdfs': total})
 
-@app.route('/api/set-pasta-ref', methods=['POST'])
-def set_pasta_ref():
+@app.route('/api/add-pasta-ref', methods=['POST'])
+def add_pasta_ref():
     p = request.json.get('path', '')
     if not p or not os.path.isdir(p):
         return jsonify({'ok': False, 'erro': 'Pasta de referência inválida ou não encontrada'})
+    if p in _state['pastas_ref']:
+        return jsonify({'ok': False, 'erro': 'Esta pasta já foi adicionada'})
+        
     nomes = ler_nomes_pasta_ref(p)
     if not nomes:
         return jsonify({'ok': False, 'erro': 'Nenhum nome válido (PDF) encontrado na pasta'})
-    _state['nomes_ref'] = nomes
+    
+    _state['pastas_ref'].append(p)
+    _state['nomes_ref'].extend(n for n in nomes if n not in _state['nomes_ref'])
+    
     return jsonify({
         'ok': True,
-        'pasta': p,
-        'total': len(nomes),
-        'preview': nomes[:40],
+        'pastas': _state['pastas_ref'],
+        'total': len(_state['nomes_ref']),
     })
+
+@app.route('/api/clear-pastas-ref', methods=['POST'])
+def clear_pastas_ref():
+    _state['pastas_ref'] = []
+    _state['nomes_ref'] = []
+    return jsonify({'ok': True})
 
 @app.route('/api/nomes-ref', methods=['GET'])
 def get_nomes_ref():
     return jsonify({'nomes': _state['nomes_ref']})
+
+@app.route('/api/check-update', methods=['GET'])
+def check_update():
+    if _state['needs_update']:
+        _state['needs_update'] = False
+        return jsonify({'update': True})
+    return jsonify({'update': False})
+
+@app.route('/api/historico', methods=['GET'])
+def get_historico():
+    h = load_historico()
+    h.reverse()
+    return jsonify({'historico': h})
 
 @app.route('/api/analisar', methods=['POST'])
 def analisar():
@@ -287,8 +370,10 @@ def executar():
                     os.remove(origem)
                     resultados.append({'arquivo': arquivo, 'pasta': pasta_nome, 'status': 'excluido',
                                        'msg': f'Duplicado removido — "{novo_nome}" já existia'})
+                    add_historico('Lote (Excluído)', arquivo, '-', pasta_nome, 'Sucesso', 'Duplicado removido')
                 except Exception as e:
                     resultados.append({'arquivo': arquivo, 'pasta': pasta_nome, 'status': 'erro', 'msg': str(e)})
+                    add_historico('Lote (Excluído)', arquivo, '-', pasta_nome, 'Erro', str(e))
             else:
                 resultados.append({'arquivo': arquivo, 'pasta': pasta_nome, 'status': 'conflito',
                                    'msg': f'Conflito: "{novo_nome}" existe com conteúdo diferente'})
@@ -296,8 +381,10 @@ def executar():
         try:
             os.rename(origem, destino)
             resultados.append({'arquivo': arquivo, 'pasta': pasta_nome, 'status': 'ok', 'msg': f'→ {novo_nome}'})
+            add_historico('Lote', arquivo, novo_nome, pasta_nome, 'Sucesso')
         except Exception as e:
             resultados.append({'arquivo': arquivo, 'pasta': pasta_nome, 'status': 'erro', 'msg': str(e)})
+            add_historico('Lote', arquivo, novo_nome, pasta_nome, 'Erro', str(e))
 
     return jsonify({'ok': True, 'resultados': resultados})
 
@@ -344,8 +431,10 @@ def renomear():
         return jsonify({'ok': False, 'erro': f'"{novo_nome}" já existe nessa pasta'})
     try:
         os.rename(origem, destino)
+        add_historico('Busca (Individual)', arquivo, novo_nome, os.path.basename(pasta_path), 'Sucesso')
         return jsonify({'ok': True, 'novo_nome': novo_nome})
     except Exception as e:
+        add_historico('Busca (Individual)', arquivo, novo_nome, os.path.basename(pasta_path), 'Erro', str(e))
         return jsonify({'ok': False, 'erro': str(e)})
 
 if __name__ == '__main__':

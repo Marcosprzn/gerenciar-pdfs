@@ -268,6 +268,9 @@
     <button class="tab-btn" onclick="showTab('busca')">
       🔍 Buscar Pessoa
     </button>
+    <button class="tab-btn" onclick="showTab('historico')">
+      🕒 Histórico
+    </button>
   </div>
 </header>
 
@@ -315,13 +318,16 @@
 
       <!-- Pasta de Referência -->
       <div class="config-box">
-        <h3>📁 Pasta de Referência</h3>
-        <p class="text-sm">Selecione a pasta onde os nomes dos PDFs já estão conferidos e corretos (esta será a base).</p>
-        <div class="config-info" id="info-pasta-ref">Nenhuma pasta selecionada</div>
-        <button class="btn btn-primary" onclick="selecionarPastaRef()">
-          📁 Selecionar Pasta Base
-        </button>
-        <div id="info-nomes" class="text-sm" style="display:none;"></div>
+        <h3>📁 Pastas de Referência</h3>
+        <p class="text-sm">Selecione uma ou mais pastas base (onde os PDFs já estão corretos).</p>
+        <div class="config-info" id="info-pasta-ref">Nenhuma pasta adicionada</div>
+        <div class="flex-row mt-8">
+          <button class="btn btn-primary" onclick="adicionarPastaRef()">
+            ➕ Adicionar Pasta
+          </button>
+          <button class="btn btn-outline" onclick="limparPastasRef()">🗑️ Limpar</button>
+        </div>
+        <div id="info-nomes" class="text-sm mt-8" style="display:none; color:var(--green); font-weight:600;"></div>
       </div>
     </div>
 
@@ -339,17 +345,24 @@
     </div>
 
     <div class="card" id="card-analisar">
-      <p class="text-sm" style="margin-bottom:14px;">Compara cada PDF das subpastas com os nomes da pasta de referência e agrupa por pessoa para você aprovar.</p>
+      <p class="text-sm" style="margin-bottom:14px;">O sistema monitora a pasta raiz. Se algum arquivo for alterado no seu computador, as sugestões aparecerão ou se ajustarão automaticamente aqui.</p>
       
+      <div class="flex-row" style="margin-bottom:16px; align-items:flex-end;">
+        <label style="flex:1;">
+          <div style="margin-bottom:6px; font-weight:600; font-size:13px;">Filtro de Assertividade (Mínimo: <span id="lbl-slider">60</span>%)</div>
+          <input type="range" id="slider-assertividade" min="50" max="100" value="60" style="width:100%; cursor:pointer; accent-color:var(--purple);" oninput="updateSliderLabel(); filtrarSugestoesVisualmente()" />
+        </label>
+      </div>
+
       <div class="flex-row" style="margin-bottom:16px;">
         <label style="display:flex; align-items:center; gap:8px; cursor:pointer; color:var(--text); font-size:13px; font-weight:500;">
-          <input type="checkbox" id="chk-ignorar-acentos" style="width:16px;height:16px;accent-color:var(--purple);" />
+          <input type="checkbox" id="chk-ignorar-acentos" style="width:16px;height:16px;accent-color:var(--purple);" onchange="analisar()" />
           Ocultar divergências apenas de acentuação (ex: JOAO e JOÃO)
         </label>
       </div>
 
       <button class="btn btn-primary" id="btn-analisar" onclick="analisar()">
-        🔍 Gerar Sugestões
+        🔄 Forçar Atualização Agora
       </button>
     </div>
 
@@ -391,6 +404,31 @@
     <datalist id="nomes-ref-list"></datalist>
   </div>
 
+  <!-- ═══ Tab 4: Histórico ════════════════════════════════════ -->
+  <div id="tab-historico" class="tab-panel">
+    <div class="card-title" style="font-size:20px; margin-bottom:20px; display:flex; justify-content:space-between;">
+      <span>🕒 Histórico de Alterações</span>
+      <button class="btn btn-outline btn-sm" onclick="carregarHistorico()">🔄 Atualizar</button>
+    </div>
+    <div class="card" style="padding:0; overflow-x:auto;">
+      <table style="width:100%; text-align:left; border-collapse:collapse; font-size:12px; min-width:800px;">
+         <thead style="background:var(--bg2);">
+            <tr>
+              <th style="padding:14px; border-bottom:1px solid var(--border);">Data/Hora</th>
+              <th style="padding:14px; border-bottom:1px solid var(--border);">Ação</th>
+              <th style="padding:14px; border-bottom:1px solid var(--border);">Nome Original</th>
+              <th style="padding:14px; border-bottom:1px solid var(--border);">Novo Nome</th>
+              <th style="padding:14px; border-bottom:1px solid var(--border);">Pasta</th>
+              <th style="padding:14px; border-bottom:1px solid var(--border);">Status</th>
+            </tr>
+         </thead>
+         <tbody id="tbody-historico">
+            <tr><td colspan="6" style="padding:20px;text-align:center;">Carregando histórico...</td></tr>
+         </tbody>
+      </table>
+    </div>
+  </div>
+
 </main>
 
 <script>
@@ -417,6 +455,12 @@ function showTab(id) {
       populateDatalist();
     });
   }
+  if (id === 'historico') carregarHistorico();
+  if (id === 'correcao') analisar(); // Analisa ao abrir a aba
+}
+
+function updateSliderLabel() {
+  document.getElementById('lbl-slider').textContent = document.getElementById('slider-assertividade').value;
 }
 
 function populateDatalist() {
@@ -447,46 +491,63 @@ async function selecionarPastaRaiz() {
   toast(`Pasta raiz configurada! ${res.subpastas} subpastas, ${res.total_pdfs} PDFs.`, 'success');
 }
 
-async function selecionarPastaRef() {
+async function adicionarPastaRef() {
   showLoading('Abrindo seletor de pasta...');
   const r = await fetch('/api/browse-folder', {method:'POST'}).then(x => x.json()).catch(() => ({path:''}));
   hideLoading();
   if (!r.path) return;
 
-  showLoading('Lendo PDFs da referência...');
-  const res = await post('/api/set-pasta-ref', {path: r.path});
+  showLoading('Adicionando referência...');
+  const res = await post('/api/add-pasta-ref', {path: r.path});
   hideLoading();
   if (!res.ok) return toast(res.erro || 'Erro ao carregar pasta de referência', 'error');
 
-  _nomesRef = res.preview; // Apenas para o preview inicial, o backend armazena todos
-  populateDatalist();
-
-  document.getElementById('info-pasta-ref').textContent = res.pasta;
+  document.getElementById('info-pasta-ref').innerHTML = res.pastas.join('<br>');
   document.getElementById('info-pasta-ref').classList.add('filled');
   const infoNomes = document.getElementById('info-nomes');
-  infoNomes.textContent = `✅ ${res.total} nomes extraídos`;
+  infoNomes.textContent = `✅ ${res.total} nomes disponíveis no banco`;
   infoNomes.style.display = 'block';
 
-  // Preview
-  document.getElementById('preview-nomes').style.display = 'block';
-  document.getElementById('preview-count').textContent = `(${res.total} nomes — mostrando primeiros 40)`;
-  const list = document.getElementById('preview-list');
-  list.innerHTML = (res.preview || []).map(n => `<span class="badge badge-purple">${n}</span>`).join('');
-
-  toast(`${res.total} nomes carregados da pasta de referência.`, 'success');
+  toast(`Pasta adicionada! Total de ${res.total} nomes corretos extraídos.`, 'success');
 }
+
+async function limparPastasRef() {
+  const res = await post('/api/clear-pastas-ref', {});
+  if (res.ok) {
+    document.getElementById('info-pasta-ref').innerHTML = 'Nenhuma pasta adicionada';
+    document.getElementById('info-pasta-ref').classList.remove('filled');
+    document.getElementById('info-nomes').style.display = 'none';
+    toast('Pastas de referência limpas.', 'info');
+  }
+}
+
+// Polling do Watchdog
+setInterval(async () => {
+    if (!document.getElementById('tab-correcao').classList.contains('active')) return;
+    try {
+        const r = await fetch('/api/check-update');
+        const d = await r.json();
+        if(d.update) {
+            console.log('Update detected from watchdog');
+            analisar(true);
+        }
+    } catch(e){}
+}, 2000);
 
 // ────────────────────────────────────────────────
 // Análise e Sugestões
 // ────────────────────────────────────────────────
 let _gruposSugestoes = {};
 
-async function analisar() {
+async function analisar(silent = false) {
   const ignorar_acentos = document.getElementById('chk-ignorar-acentos').checked;
-  showLoading('Gerando sugestões...');
+  if (!silent) showLoading('Analisando em tempo real...');
   const res = await post('/api/analisar', { ignorar_acentos });
-  hideLoading();
-  if (!res.ok) return toast(res.erro, 'error');
+  if (!silent) hideLoading();
+  if (!res.ok) {
+    if(!silent) toast(res.erro, 'error');
+    return;
+  }
 
   _analise = res;
   _gruposSugestoes = {};
@@ -529,8 +590,8 @@ async function analisar() {
           ${itens.map((it, iIdx) => {
             const pct = Math.round(it.razao * 100);
             return `
-            <div class="flex-row" style="padding:6px 0; border-bottom:1px solid var(--border); font-size:13px; align-items:flex-start;">
-              <input type="checkbox" checked id="chk-${gIdx}-${iIdx}" style="margin-top:3px;">
+            <div class="flex-row s-item" data-razao="${pct}" style="padding:6px 0; border-bottom:1px solid var(--border); font-size:13px; align-items:flex-start; transition: opacity 0.2s;">
+              <input type="checkbox" checked class="chk-item" id="chk-${gIdx}-${iIdx}" data-gidx="${gIdx}" style="margin-top:3px;">
               <div style="flex:1;">
                 <div>📄 ${it.arquivo}</div>
                 <div style="color:var(--text2); font-size:11px;">📂 ${it.pasta}</div>
@@ -544,8 +605,32 @@ async function analisar() {
   });
 
   container.innerHTML = html;
-  document.getElementById('exec-status').textContent = `Encontradas sugestões de correção para ${chaves.length} pessoas.`;
-  toast(`Análise concluída! ${chaves.length} grupos sugeridos.`, 'success');
+  filtrarSugestoesVisualmente(); // Aplica o slider de imediato
+  document.getElementById('exec-status').textContent = `Encontradas sugestões para ${chaves.length} pessoas (escondidas pelo slider não são afetadas).`;
+  if (!silent) toast(`Análise concluída! ${chaves.length} grupos sugeridos.`, 'success');
+}
+
+function filtrarSugestoesVisualmente() {
+  const limite = parseInt(document.getElementById('slider-assertividade').value, 10);
+  const items = document.querySelectorAll('.s-item');
+  items.forEach(el => {
+    const r = parseInt(el.getAttribute('data-razao'), 10);
+    const cb = el.querySelector('input[type="checkbox"]');
+    if (r < limite) {
+      el.style.display = 'none';
+      if(cb) cb.checked = false; // Desmarca ao esconder
+    } else {
+      el.style.display = 'flex';
+      if(cb) cb.checked = true; // Marca ao aparecer
+    }
+  });
+  
+  // Esconder cards inteiros se não tiver nenhum filho visível
+  const cards = document.querySelectorAll('[id^="sugestao-card-"]');
+  cards.forEach(c => {
+    const visiveis = Array.from(c.querySelectorAll('.s-item')).filter(i => i.style.display !== 'none');
+    c.style.display = visiveis.length === 0 ? 'none' : 'block';
+  });
 }
 
 async function aprovarGrupo(nomeRefEsc, gIdx) {
@@ -573,8 +658,8 @@ async function aprovarGrupo(nomeRefEsc, gIdx) {
   if (!res.ok) return toast('Erro ao executar', 'error');
 
   showModalResultados(res.resultados);
-
-  // Remove o card da tela
+  carregarHistorico();
+  // Atualiza o card visualmente
   const card = document.getElementById(`sugestao-card-${gIdx}`);
   if (card) {
     card.style.opacity = '0.4';
@@ -583,6 +668,37 @@ async function aprovarGrupo(nomeRefEsc, gIdx) {
     card.querySelector('.btn-green').classList.remove('btn-green');
     card.querySelector('.btn').classList.add('btn-outline');
   }
+}
+
+// ────────────────────────────────────────────────
+// Aba Histórico
+// ────────────────────────────────────────────────
+async function carregarHistorico() {
+  const tb = document.getElementById('tbody-historico');
+  const res = await fetch('/api/historico').then(r => r.json()).catch(()=>({historico:[]}));
+  const h = res.historico || [];
+  
+  if (h.length === 0) {
+    tb.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;">Nenhum histórico registrado ainda.</td></tr>';
+    return;
+  }
+  
+  tb.innerHTML = h.map(i => {
+    let statusCol = `<span class="badge badge-blue">${i.status}</span>`;
+    if(i.status==='Sucesso') statusCol = `<span class="badge badge-green">Sucesso</span>`;
+    if(i.status==='Erro') statusCol = `<span class="badge badge-red">Erro</span>`;
+    
+    return `
+      <tr>
+        <td style="padding:10px 14px; border-bottom:1px solid var(--border);">${i.data}</td>
+        <td style="padding:10px 14px; border-bottom:1px solid var(--border);">${i.acao}</td>
+        <td style="padding:10px 14px; border-bottom:1px solid var(--border); color:var(--text2);">${i.arquivo_original}</td>
+        <td style="padding:10px 14px; border-bottom:1px solid var(--border); font-weight:600; color:var(--green);">${i.novo_nome}</td>
+        <td style="padding:10px 14px; border-bottom:1px solid var(--border); color:var(--text2);">${i.pasta}</td>
+        <td style="padding:10px 14px; border-bottom:1px solid var(--border);">${statusCol} <div style="font-size:10px;color:var(--text2);">${i.msg}</div></td>
+      </tr>
+    `;
+  }).join('');
 }
 
 function showModalResultados(resultados) {
