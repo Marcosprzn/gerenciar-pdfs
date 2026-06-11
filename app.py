@@ -296,6 +296,23 @@ def get_historico():
     h.reverse()
     return jsonify({'historico': h})
 
+@app.route('/api/shutdown', methods=['POST'])
+def shutdown():
+    global observer
+    if observer:
+        try:
+            observer.stop()
+        except: pass
+    
+    def kill_server():
+        import time
+        time.sleep(0.5)
+        os._exit(0)
+    
+    import threading
+    threading.Thread(target=kill_server).start()
+    return jsonify({'ok': True})
+
 @app.route('/api/analisar', methods=['POST'])
 def analisar():
     if not _state['pasta_raiz']:
