@@ -1047,52 +1047,145 @@ async function analisarConciliacao() {
     return;
   }
   
+  window.auditData = r.resultados;
+  renderAuditTabs();
+}
+
+function renderAuditTabs() {
   const divAudit = document.getElementById('conciliacao-audit');
-  if (r.resultados.length === 0) {
-    divAudit.innerHTML = `
-      <div style="background:rgba(0, 200, 83, 0.1); border-left:4px solid var(--green); padding:15px; border-radius:4px;">
-        <h3 style="margin:0; color:var(--green);">✅ Análise Concluída Perfeita!</h3>
-        <p style="margin:5px 0 0 0; color:var(--text);">Nenhum Erro Nominal ou pessoa Não Encontrada. Pode prosseguir para a geração.</p>
-      </div>`;
+  const competencias = Object.keys(window.auditData || {}).sort();
+  
+  if (competencias.length === 0) {
+    divAudit.innerHTML = '<p style="color:var(--text2);">Nenhum dado de auditoria disponível.</p>';
     return;
   }
   
-  divAudit.innerHTML = `
-    <h3 style="color:var(--yellow); border-bottom:1px solid var(--border); padding-bottom:10px;">🔎 Auditoria: ${r.resultados.length} Pendências Encontradas</h3>
-    <p style="color:var(--text2); margin-bottom:15px;">Os itens abaixo são divergências entre a planilha e o PDF. Você pode corrigir as planilhas aqui mesmo antes de gerar os relatórios finais.</p>
-    <div style="overflow-x:auto;">
-      <table class="table" style="font-size:13px;">
+  let html = `<div style="display:flex; gap:5px; border-bottom:1px solid var(--border); margin-bottom:15px; overflow-x:auto; padding-bottom:5px;" id="audit-tabs-header">`;
+  
+  competencias.forEach((comp, idx) => {
+    html += `<button class="tab-btn ${idx===0 ? 'active' : ''}" id="audit-btn-${comp}" onclick="showAuditTab('${comp}')">${comp}</button>`;
+  });
+  html += `</div><div id="audit-tab-content"></div>`;
+  
+  divAudit.innerHTML = html;
+  
+  // Mostrar a primeira
+  if (competencias.length > 0) {
+    showAuditTab(competencias[0]);
+  }
+}
+
+window.showAuditTab = function(comp) {
+  // Atualiza botoes
+  document.querySelectorAll('#audit-tabs-header .tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(`audit-btn-${comp}`).classList.add('active');
+  
+  const contentDiv = document.getElementById('audit-tab-content');
+  const data = window.auditData[comp];
+  
+  if (data.erro_pasta) {
+    contentDiv.innerHTML = `<div style="padding:20px; background:rgba(239,68,68,0.1); border-left:4px solid var(--red); color:var(--red);">
+      Pasta raiz de PDFs para a competência ${comp} não encontrada.
+    </div>`;
+    return;
+  }
+  
+  const est = data.estatisticas;
+  
+  let html = `
+    <!-- ESTATÍSTICAS -->
+    <div style="display:flex; gap:15px; margin-bottom:25px; flex-wrap:wrap;">
+      <div style="flex:1; background:var(--bg3); padding:15px; border-radius:8px; border:1px solid var(--border); text-align:center;">
+        <div style="font-size:24px; font-weight:bold; color:var(--green);">${est.encontrados}</div>
+        <div style="font-size:12px; color:var(--text2);">Encontrados (OK)</div>
+      </div>
+      <div style="flex:1; background:var(--bg3); padding:15px; border-radius:8px; border:1px solid var(--border); text-align:center;">
+        <div style="font-size:24px; font-weight:bold; color:var(--yellow);">${est.erros_nominais}</div>
+        <div style="font-size:12px; color:var(--text2);">Erros Nominais</div>
+      </div>
+      <div style="flex:1; background:var(--bg3); padding:15px; border-radius:8px; border:1px solid var(--border); text-align:center;">
+        <div style="font-size:24px; font-weight:bold; color:var(--red);">${est.nao_encontrados}</div>
+        <div style="font-size:12px; color:var(--text2);">Não Encontrados</div>
+      </div>
+      <div style="flex:1; background:var(--bg3); padding:15px; border-radius:8px; border:1px solid var(--border); text-align:center;">
+        <div style="font-size:24px; font-weight:bold; color:var(--blue);">${est.pdfs_extras}</div>
+        <div style="font-size:12px; color:var(--text2);">PDFs Extras</div>
+      </div>
+    </div>
+  `;
+  
+  // ERROS NOMINAIS
+  if (data.erros_nominais && data.erros_nominais.length > 0) {
+    html += `
+      <h3 style="color:var(--yellow); margin-bottom:10px; font-size:14px; text-transform:uppercase;">⚠️ Possíveis Erros Nominais</h3>
+      <table class="table" style="font-size:13px; margin-bottom:25px;">
         <thead>
-          <tr>
-            <th>Comp.</th>
-            <th>PIS</th>
-            <th>Nome na Planilha</th>
-            <th>Nome no PDF</th>
-            <th>Status</th>
-            <th>Ação</th>
-          </tr>
+          <tr><th>PIS</th><th>Nome na Planilha</th><th>Nome no PDF</th><th>Ação</th></tr>
         </thead>
         <tbody>
-          ${r.resultados.map(res => `
+          ${data.erros_nominais.map(e => `
             <tr>
-              <td>${res.competencia}</td>
-              <td>${res.pis}</td>
-              <td style="color:var(--red); font-weight:bold;">${res.nome_planilha}</td>
-              <td style="color:var(--blue);">${res.nome_pdf || '-'}</td>
-              <td><span style="background:rgba(245,158,11,0.2); padding:3px 6px; border-radius:4px; font-size:11px;">${res.status}</span></td>
-              <td>
-                ${res.nome_pdf ? `
-                  <button class="btn btn-green btn-sm" onclick="corrigirXlsFisico('${escape(res.caminho_planilha)}', '${res.pis}', '${escape(res.nome_pdf)}', '${res.competencia}')">
-                    ✏️ Corrigir .xls
-                  </button>
-                ` : '<span style="color:var(--text2); font-size:12px;">Sem sugestão</span>'}
+              <td>${e.pis}</td>
+              <td style="color:var(--red);">${e.nome_planilha}</td>
+              <td style="color:var(--blue); font-weight:bold;">${e.nome_pdf}</td>
+              <td style="width:150px;">
+                <button class="btn btn-green btn-sm" onclick="corrigirXlsFisico('${escape(data.caminho_planilha)}', '${e.pis}', '${escape(e.nome_pdf)}', '${comp}')">✏️ Corrigir .xls</button>
               </td>
             </tr>
           `).join('')}
         </tbody>
       </table>
-    </div>
-  `;
+    `;
+  }
+  
+  // NÃO ENCONTRADOS
+  if (data.nao_encontrados && data.nao_encontrados.length > 0) {
+    html += `
+      <h3 style="color:var(--red); margin-bottom:10px; font-size:14px; text-transform:uppercase;">❌ Não Encontrados no .PDF</h3>
+      <table class="table" style="font-size:13px; margin-bottom:25px;">
+        <thead>
+          <tr><th>PIS</th><th>Nome na Planilha</th><th>Proc.</th></tr>
+        </thead>
+        <tbody>
+          ${data.nao_encontrados.map(e => `
+            <tr>
+              <td>${e.pis}</td>
+              <td style="font-weight:bold;">${e.nome_planilha}</td>
+              <td style="color:var(--text2);">${e.proc}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+  
+  // PDFs EXTRAS
+  if (data.pdfs_extras && data.pdfs_extras.length > 0) {
+    html += `
+      <h3 style="color:var(--blue); margin-bottom:10px; font-size:14px; text-transform:uppercase;">🔵 PDFs Extras (Na pasta, mas não na planilha)</h3>
+      <table class="table" style="font-size:13px; margin-bottom:25px;">
+        <thead>
+          <tr><th>Nome do Arquivo Encontrado</th></tr>
+        </thead>
+        <tbody>
+          ${data.pdfs_extras.map(e => `
+            <tr><td>${e.nome_pdf}</td></tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+  
+  if (data.erros_nominais.length === 0 && data.nao_encontrados.length === 0) {
+    html += `
+      <div style="background:rgba(0, 200, 83, 0.1); border-left:4px solid var(--green); padding:15px; border-radius:4px;">
+        <h3 style="margin:0; color:var(--green);">✅ Tudo Certo Aqui!</h3>
+        <p style="margin:5px 0 0 0; color:var(--text);">Nenhuma divergência a ser corrigida nesta competência.</p>
+      </div>
+    `;
+  }
+  
+  contentDiv.innerHTML = html;
 }
 
 window.corrigirXlsFisico = async function(caminho, pis, novo_nome, comp) {

@@ -657,37 +657,77 @@ def analisar_conciliacao():
             if mes and ano:
                 mapa_pastas[f"{mes}-{ano}"] = caminho_dir
 
-    resultados_audit = []
+    resultados_audit = {}
+
+    def _status_base(s):
+        for prefixo in [
+            "NÃO ENCONTRADO NO .PDF",
+            "POSSÍVEL ERRO NOMINAL",
+            "ENCONTRADO COMO 115",
+            "ENCONTRADO COM ABREVIAÇÃO",
+            "ENCONTRADO",
+            "ENCONTRADO VIA LLM"
+        ]:
+            if str(s).startswith(prefixo):
+                return prefixo
+        if str(s).startswith("PDF NA PASTA"):
+            return "PDF NA PASTA, MAS NÃO NA PLANILHA"
+        return str(s)
 
     for comp, p_data in _state['planilhas'].items():
         df = p_data['df'].copy()
         pasta_pdfs = mapa_pastas.get(comp)
         
         if not pasta_pdfs:
+            resultados_audit[comp] = {
+                'erro_pasta': True,
+                'estatisticas': {},
+                'erros_nominais': [],
+                'nao_encontrados': [],
+                'pdfs_extras': [],
+                'caminho_planilha': p_data['caminho']
+            }
             continue
             
-        # Roda a verificacao para achar os status
         df_verificado = confinicial.verificar_pdfs(df, pasta_pdfs)
+        df_verificado['Status Base'] = df_verificado['Status PDF'].apply(_status_base)
         
-        # Filtra apenas os com erro/nao encontrados
+        totais = df_verificado['Status Base'].value_counts().to_dict()
+        
+        estatisticas = {
+            'encontrados': totais.get('ENCONTRADO', 0) + totais.get('ENCONTRADO COMO 115', 0) + totais.get('ENCONTRADO COM ABREVIAÇÃO', 0) + totais.get('ENCONTRADO VIA LLM', 0),
+            'erros_nominais': totais.get('POSSÍVEL ERRO NOMINAL', 0),
+            'nao_encontrados': totais.get('NÃO ENCONTRADO NO .PDF', 0),
+            'pdfs_extras': totais.get('PDF NA PASTA, MAS NÃO NA PLANILHA', 0),
+            'llm': totais.get('ENCONTRADO VIA LLM', 0)
+        }
+        
+        erros_nominais = []
+        nao_encontrados = []
+        pdfs_extras = []
+        
         for idx, row in df_verificado.iterrows():
-            status = str(row.get('Status PDF', ''))
-            if 'POSSÍVEL ERRO NOMINAL' in status or 'NÃO ENCONTRADO NO .PDF' in status:
-                pis = normalizar_pis(row.get('PIS', ''))
-                nome_planilha = str(row.get('NOMES', ''))
-                nome_pdf = str(row.get('Nome do Arquivo Encontrado', ''))
-                
-                # Para não encontrado, ele pode não sugerir nome de PDF.
-                # Nesses casos, o usuário altera no Excel ou renomeia o PDF.
-                
-                resultados_audit.append({
-                    'competencia': comp,
-                    'pis': pis,
-                    'nome_planilha': nome_planilha,
-                    'nome_pdf': nome_pdf,
-                    'status': status,
-                    'caminho_planilha': p_data['caminho']
-                })
+            status = str(row.get('Status Base', ''))
+            pis = normalizar_pis(row.get('PIS', ''))
+            nome_planilha = str(row.get('NOMES', ''))
+            nome_pdf = str(row.get('Nome do Arquivo Encontrado', ''))
+            proc = str(row.get('PROC.', ''))
+            
+            if status == 'POSSÍVEL ERRO NOMINAL':
+                erros_nominais.append({'pis': pis, 'nome_planilha': nome_planilha, 'nome_pdf': nome_pdf})
+            elif status == 'NÃO ENCONTRADO NO .PDF':
+                nao_encontrados.append({'pis': pis, 'nome_planilha': nome_planilha, 'proc': proc})
+            elif status == 'PDF NA PASTA, MAS NÃO NA PLANILHA':
+                pdfs_extras.append({'nome_pdf': nome_pdf})
+
+        resultados_audit[comp] = {
+            'erro_pasta': False,
+            'estatisticas': estatisticas,
+            'erros_nominais': erros_nominais,
+            'nao_encontrados': nao_encontrados,
+            'pdfs_extras': pdfs_extras,
+            'caminho_planilha': p_data['caminho']
+        }
 
     return jsonify({'ok': True, 'resultados': resultados_audit})
 
