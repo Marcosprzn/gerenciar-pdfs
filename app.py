@@ -9,13 +9,14 @@ from difflib import SequenceMatcher
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 import sys
-
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import llm_matcher
 import confinicial
 import pandas as pd
 import tkinter as tk
 from tkinter import filedialog
+from openpyxl import load_workbook
+import math
 
 app = Flask(__name__)
 app.secret_key = 'gerenciador_pdfs_2024'
@@ -460,6 +461,56 @@ def renomear():
         add_historico('Busca (Individual)', arquivo, novo_nome, os.path.basename(pasta_path), 'Erro', str(e))
         return jsonify({'ok': False, 'erro': str(e)})
 
+# ─── Funções Auxiliares de Conciliação ──────────────────────────────────
+def converter_xls_para_xlsx(caminho_xls):
+    caminho_xlsx = os.path.splitext(caminho_xls)[0] + '.xlsx'
+    if os.path.exists(caminho_xlsx):
+        os.remove(caminho_xlsx)
+
+    try:
+        import win32com.client, pythoncom
+        pythoncom.CoInitialize()
+        xl = win32com.client.Dispatch('Excel.Application')
+        try:
+            xl.DisplayAlerts = False
+        except:
+            pass
+        wb = xl.Workbooks.Open(caminho_xls)
+        wb.SaveAs(caminho_xlsx, FileFormat=51)  # 51 = xlOpenXMLWorkbook
+        wb.Close()
+        xl.Quit()
+        pythoncom.CoUninitialize()
+        return caminho_xlsx
+    except Exception as e:
+        try:
+            pythoncom.CoUninitialize()
+        except:
+            pass
+        try:
+            import xlrd
+            rb = xlrd.open_workbook(caminho_xls)
+            nome_aba = 'FGTS EM ATRASO - PROCESSOS'
+            if nome_aba not in rb.sheet_names():
+                nome_aba = rb.sheet_names()[0]
+            df_raw = pd.read_excel(caminho_xls, sheet_name=nome_aba, header=None)
+            df_raw.to_excel(caminho_xlsx, sheet_name='FGTS EM ATRASO - PROCESSOS', index=False, header=False)
+            return caminho_xlsx
+        except:
+            return None
+
+def normalizar_pis(valor):
+    if valor is None:
+        return ''
+    if isinstance(valor, float):
+        if math.isnan(valor) or valor == 0:
+            return ''
+        return str(int(valor)).zfill(11)
+    texto = str(valor).strip()
+    if not texto or texto == '0':
+        return ''
+    digitos = re.sub(r'\D', '', texto)
+    return digitos.zfill(11)
+
 # ─── Conciliação de Planilhas ──────────────────────────────────────────
 
 @app.route('/api/carregar-planilhas', methods=['POST'])
@@ -590,6 +641,106 @@ def corrigir_pis():
 def limpar_conciliacao():
     _state['planilhas'] = {}
     return jsonify({'ok': True})
+
+@app.route('/api/analisar-conciliacao', methods=['POST'])
+def analisar_conciliacao():
+    if not _state['pasta_raiz']:
+        return jsonify({'ok': False, 'erro': 'Selecione a Pasta Raiz de PDFs na aba de Configuração primeiro.'})
+    if not _state['planilhas']:
+        return jsonify({'ok': False, 'erro': 'Nenhuma planilha carregada.'})
+
+    mapa_pastas = {}
+    for d in os.listdir(_state['pasta_raiz']):
+        caminho_dir = os.path.join(_state['pasta_raiz'], d)
+        if os.path.isdir(caminho_dir):
+            mes, ano = confinicial.extrair_competencia_pasta(d)
+            if mes and ano:
+                mapa_pastas[f"{mes}-{ano}"] = caminho_dir
+
+    resultados_audit = []
+
+    for comp, p_data in _state['planilhas'].items():
+        df = p_data['df'].copy()
+        pasta_pdfs = mapa_pastas.get(comp)
+        
+        if not pasta_pdfs:
+            continue
+            
+        # Roda a verificacao para achar os status
+        df_verificado = confinicial.verificar_pdfs(df, pasta_pdfs)
+        
+        # Filtra apenas os com erro/nao encontrados
+        for idx, row in df_verificado.iterrows():
+            status = str(row.get('Status PDF', ''))
+            if 'POSSÍVEL ERRO NOMINAL' in status or 'NÃO ENCONTRADO NO .PDF' in status:
+                pis = normalizar_pis(row.get('PIS', ''))
+                nome_planilha = str(row.get('NOMES', ''))
+                nome_pdf = str(row.get('Nome do Arquivo Encontrado', ''))
+                
+                # Para não encontrado, ele pode não sugerir nome de PDF.
+                # Nesses casos, o usuário altera no Excel ou renomeia o PDF.
+                
+                resultados_audit.append({
+                    'competencia': comp,
+                    'pis': pis,
+                    'nome_planilha': nome_planilha,
+                    'nome_pdf': nome_pdf,
+                    'status': status,
+                    'caminho_planilha': p_data['caminho']
+                })
+
+    return jsonify({'ok': True, 'resultados': resultados_audit})
+
+@app.route('/api/corrigir-xls-fisico', methods=['POST'])
+def corrigir_xls_fisico():
+    data = request.json
+    caminho_planilha = data.get('caminho_planilha')
+    pis_alvo = normalizar_pis(data.get('pis'))
+    novo_nome = data.get('novo_nome')
+    comp = data.get('competencia')
+    
+    if not os.path.exists(caminho_planilha):
+        return jsonify({'ok': False, 'erro': 'Arquivo xls/xlsx não encontrado fisicamente.'})
+        
+    ext = os.path.splitext(caminho_planilha)[1].lower()
+    caminho_xlsx = caminho_planilha
+    
+    if ext == '.xls':
+        caminho_xlsx = converter_xls_para_xlsx(caminho_planilha)
+        if not caminho_xlsx:
+            return jsonify({'ok': False, 'erro': 'Falha ao converter .xls para .xlsx. O Excel precisa estar instalado.'})
+            
+    try:
+        wb = load_workbook(caminho_xlsx)
+        try:
+            ws = wb['FGTS EM ATRASO - PROCESSOS']
+        except:
+            ws = wb.active
+            
+        alterados = 0
+        # A varredura de PIS na coluna C (3) e Nome na coluna D (4)
+        for row in range(1, ws.max_row + 1):
+            val_pis = ws.cell(row=row, column=3).value
+            if normalizar_pis(val_pis) == pis_alvo:
+                ws.cell(row=row, column=4).value = novo_nome
+                alterados += 1
+                
+        wb.save(caminho_xlsx)
+        
+        # Atualiza em memória o df
+        if comp in _state['planilhas']:
+            # Se era .xls e virou .xlsx, atualiza o caminho na memoria
+            _state['planilhas'][comp]['caminho'] = caminho_xlsx
+            df = _state['planilhas'][comp]['df']
+            
+            # Recarrega a planilha recem salva para memoria
+            novo_df = confinicial.ler_planilha_fgts(caminho_xlsx)
+            if novo_df is not None:
+                _state['planilhas'][comp]['df'] = novo_df
+                
+        return jsonify({'ok': True, 'alterados': alterados, 'novo_caminho': caminho_xlsx})
+    except Exception as e:
+        return jsonify({'ok': False, 'erro': str(e)})
 
 @app.route('/api/gerar-conciliacao', methods=['POST'])
 def gerar_conciliacao():

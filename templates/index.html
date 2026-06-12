@@ -46,8 +46,10 @@
       display: flex; align-items: center; gap: 32px; height: 60px;
     }
     .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 16px;
-      background: linear-gradient(135deg, #7c3aed, #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-    .logo span { font-size: 22px; -webkit-text-fill-color: unset; }
+      background: linear-gradient(135deg, #7c3aed, #3b82f6); 
+      -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent; color: transparent; }
+    .logo span { font-size: 22px; -webkit-text-fill-color: initial; color: initial; }
     .tabs { display: flex; gap: 4px; flex: 1; }
     .tab-btn {
       padding: 8px 18px; border-radius: 8px; border: none; cursor: pointer;
@@ -307,18 +309,23 @@
         <h2>📊 Dashboard de Conciliação</h2>
         <div>
           <button class="btn btn-blue" onclick="carregarPlanilhas()">📄 Carregar Planilhas .xls</button>
+          <button class="btn btn-purple" onclick="analisarConciliacao()">🔎 Analisar com PDFs</button>
           <button class="btn btn-red" onclick="limparConciliacao()">🗑️ Limpar Tudo</button>
-          <button class="btn btn-green" onclick="gerarConciliacao()">🚀 Gerar Conciliação e Organizar Pastas</button>
+          <button class="btn btn-green" onclick="gerarConciliacao()">🚀 Salvar Planilhas e Organizar Pastas</button>
         </div>
       </div>
-      <p style="color:var(--text2); margin-bottom:20px;">Carregue planilhas do FGTS. O sistema fará a varredura cruzando o PIS para achar nomes diferentes, e ao gerar ele fará o match com os PDFs da Pasta Raiz, salvará os Excel com cores e dividirá nas pastas 115 e 660.</p>
+      <p style="color:var(--text2); margin-bottom:20px;">Carregue as planilhas do FGTS. Em seguida clique em <b>Analisar com PDFs</b> para auditar os nomes e corrigir os .xls físicos cruzando pelo PIS.</p>
       
       <div id="conciliacao-cards" style="display:flex; flex-wrap:wrap; gap:15px; margin-bottom:30px;">
         <!-- Cards das competencias carregadas aparecerao aqui -->
       </div>
       
       <div id="conciliacao-conflitos">
-        <!-- Conflitos de PIS aparecerao aqui -->
+        <!-- Conflitos de PIS cruzados entre planilhas -->
+      </div>
+      
+      <div id="conciliacao-audit" style="margin-top:20px;">
+        <!-- Tabela de erros de analise -->
       </div>
     </div>
   </div>
@@ -1019,8 +1026,92 @@ async function gerarConciliacao() {
       alert("Concluído!\n\n" + r.resultados.join("\n"));
     }
     carregarStatusConciliacao();
+    document.getElementById('conciliacao-audit').innerHTML = '';
   } else {
     toast('Erro: ' + r.erro, 'error');
+  }
+}
+
+async function analisarConciliacao() {
+  const btn = document.querySelector('button[onclick="analisarConciliacao()"]');
+  const oldText = btn.innerHTML;
+  btn.innerHTML = '⏳ Analisando...';
+  btn.disabled = true;
+  
+  const r = await post('/api/analisar-conciliacao', {});
+  btn.innerHTML = oldText;
+  btn.disabled = false;
+  
+  if (!r.ok) {
+    toast('Erro: ' + r.erro, 'error');
+    return;
+  }
+  
+  const divAudit = document.getElementById('conciliacao-audit');
+  if (r.resultados.length === 0) {
+    divAudit.innerHTML = `
+      <div style="background:rgba(0, 200, 83, 0.1); border-left:4px solid var(--green); padding:15px; border-radius:4px;">
+        <h3 style="margin:0; color:var(--green);">✅ Análise Concluída Perfeita!</h3>
+        <p style="margin:5px 0 0 0; color:var(--text);">Nenhum Erro Nominal ou pessoa Não Encontrada. Pode prosseguir para a geração.</p>
+      </div>`;
+    return;
+  }
+  
+  divAudit.innerHTML = `
+    <h3 style="color:var(--yellow); border-bottom:1px solid var(--border); padding-bottom:10px;">🔎 Auditoria: ${r.resultados.length} Pendências Encontradas</h3>
+    <p style="color:var(--text2); margin-bottom:15px;">Os itens abaixo são divergências entre a planilha e o PDF. Você pode corrigir as planilhas aqui mesmo antes de gerar os relatórios finais.</p>
+    <div style="overflow-x:auto;">
+      <table class="table" style="font-size:13px;">
+        <thead>
+          <tr>
+            <th>Comp.</th>
+            <th>PIS</th>
+            <th>Nome na Planilha</th>
+            <th>Nome no PDF</th>
+            <th>Status</th>
+            <th>Ação</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${r.resultados.map(res => `
+            <tr>
+              <td>${res.competencia}</td>
+              <td>${res.pis}</td>
+              <td style="color:var(--red); font-weight:bold;">${res.nome_planilha}</td>
+              <td style="color:var(--blue);">${res.nome_pdf || '-'}</td>
+              <td><span style="background:rgba(245,158,11,0.2); padding:3px 6px; border-radius:4px; font-size:11px;">${res.status}</span></td>
+              <td>
+                ${res.nome_pdf ? `
+                  <button class="btn btn-green btn-sm" onclick="corrigirXlsFisico('${escape(res.caminho_planilha)}', '${res.pis}', '${escape(res.nome_pdf)}', '${res.competencia}')">
+                    ✏️ Corrigir .xls
+                  </button>
+                ` : '<span style="color:var(--text2); font-size:12px;">Sem sugestão</span>'}
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+window.corrigirXlsFisico = async function(caminho, pis, novo_nome, comp) {
+  if(!confirm(`Deseja alterar FISICAMENTE a planilha para o nome "${novo_nome}"?`)) return;
+  
+  toast('Aplicando correção na planilha...', 'info');
+  const r = await post('/api/corrigir-xls-fisico', {
+    caminho_planilha: caminho,
+    pis: pis,
+    novo_nome: novo_nome,
+    competencia: comp
+  });
+  
+  if (r.ok) {
+    toast(`Planilha alterada e recarregada na memória.`, 'success');
+    // Roda de novo a analise para atualizar a tela
+    analisarConciliacao();
+  } else {
+    toast('Erro ao alterar: ' + r.erro, 'error');
   }
 }
 
