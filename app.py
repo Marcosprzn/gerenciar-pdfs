@@ -8,7 +8,9 @@ import os, re, unicodedata, datetime, json
 from difflib import SequenceMatcher
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
+import tempfile
 import sys
+import xlrd
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import llm_matcher
 import confinicial
@@ -743,57 +745,96 @@ def corrigir_xls_fisico():
     arquivos_alterados = 0
     linhas_alteradas = 0
     
+    # Helper functions
+    def get_correcoes_xls(caminho):
+        indices = []
+        try:
+            wb = xlrd.open_workbook(caminho)
+            try:
+                sheet = wb.sheet_by_name('FGTS EM ATRASO - PROCESSOS')
+            except:
+                sheet = wb.sheet_by_index(0)
+            for row in range(sheet.nrows):
+                try:
+                    val_pis = normalizar_pis(sheet.cell_value(row, 2))
+                except:
+                    val_pis = ""
+                if val_pis == pis_alvo:
+                    val_nome = str(sheet.cell_value(row, 3)).strip().upper()
+                    if val_nome != novo_nome:
+                        indices.append(row)
+        except Exception as e:
+            print(f"Erro xlrd: {e}")
+        return indices
+        
     # Varre TODAS as planilhas carregadas
     for comp, p_data in _state['planilhas'].items():
-        df = p_data['df']
-        
-        # Verifica na memória se este PIS existe nessa planilha
-        mascara = df['PIS'].apply(normalizar_pis) == pis_alvo
-        if not mascara.any():
-            continue
-            
-        # PIS existe, vamos abrir o arquivo físico
         caminho_planilha = p_data['caminho']
         if not os.path.exists(caminho_planilha):
             continue
             
         ext = os.path.splitext(caminho_planilha)[1].lower()
-        caminho_xlsx = caminho_planilha
+        alterados_nesta = 0
         
         if ext == '.xls':
-            caminho_xlsx = converter_xls_para_xlsx(caminho_planilha)
-            if not caminho_xlsx:
-                continue
-                
-        try:
-            wb = load_workbook(caminho_xlsx)
+            indices = get_correcoes_xls(caminho_planilha)
+            if indices:
+                import win32com.client
+                import pythoncom
+                try:
+                    pythoncom.CoInitialize()
+                    xl = win32com.client.Dispatch('Excel.Application')
+                    xl.Application.DisplayAlerts = False
+                    xl.Visible = False
+                    abs_path = os.path.abspath(caminho_planilha)
+                    wb = xl.Workbooks.Open(abs_path)
+                    try:
+                        ws = wb.Sheets('FGTS EM ATRASO - PROCESSOS')
+                    except:
+                        ws = wb.Sheets(1)
+                        
+                    for r in indices:
+                        ws.Cells(r + 1, 4).Value = novo_nome
+                        alterados_nesta += 1
+                        
+                    wb.Close(SaveChanges=True)
+                except Exception as e:
+                    print(f"Erro COM win32: {e}")
+                finally:
+                    try:
+                        xl.Quit()
+                    except:
+                        pass
+                    pythoncom.CoUninitialize()
+                    
+        else:
             try:
-                ws = wb['FGTS EM ATRASO - PROCESSOS']
-            except:
-                ws = wb.active
-                
-            alterados_nesta_planilha = 0
-            for row in range(1, ws.max_row + 1):
-                val_pis = ws.cell(row=row, column=3).value
-                if normalizar_pis(val_pis) == pis_alvo:
-                    # Atualiza o nome na coluna 4
-                    ws.cell(row=row, column=4).value = novo_nome
-                    alterados_nesta_planilha += 1
+                wb = load_workbook(caminho_planilha)
+                try:
+                    ws = wb['FGTS EM ATRASO - PROCESSOS']
+                except:
+                    ws = wb.active
                     
-            if alterados_nesta_planilha > 0:
-                wb.save(caminho_xlsx)
-                arquivos_alterados += 1
-                linhas_alteradas += alterados_nesta_planilha
+                for row in range(1, ws.max_row + 1):
+                    val_pis = ws.cell(row=row, column=3).value
+                    val_nome = ws.cell(row=row, column=4).value
+                    if normalizar_pis(val_pis) == pis_alvo:
+                        if str(val_nome).strip().upper() != novo_nome:
+                            ws.cell(row=row, column=4).value = novo_nome
+                            alterados_nesta += 1
+                            
+                if alterados_nesta > 0:
+                    wb.save(caminho_planilha)
+            except Exception as e:
+                print(f"Erro openpyxl: {e}")
                 
-                # Atualiza na memoria
-                _state['planilhas'][comp]['caminho'] = caminho_xlsx
-                novo_df = confinicial.ler_planilha_fgts(caminho_xlsx)
-                if novo_df is not None:
-                    _state['planilhas'][comp]['df'] = novo_df
-                    
-        except Exception as e:
-            print(f"Erro ao salvar xls físico em lote: {e}")
-            
+        if alterados_nesta > 0:
+            arquivos_alterados += 1
+            linhas_alteradas += alterados_nesta
+            novo_df = confinicial.ler_planilha_fgts(caminho_planilha)
+            if novo_df is not None:
+                _state['planilhas'][comp]['df'] = novo_df
+
     return jsonify({
         'ok': True, 
         'arquivos_alterados': arquivos_alterados, 
