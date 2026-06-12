@@ -11,6 +11,9 @@ from watchdog.events import FileSystemEventHandler
 import tempfile
 import sys
 import xlrd
+from odf import opendocument
+from odf.table import Table, TableRow, TableCell
+from odf.text import P
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import llm_matcher
 import confinicial
@@ -812,6 +815,63 @@ def corrigir_xls_fisico():
                         pass
                     pythoncom.CoUninitialize()
                     
+        elif ext == '.ods':
+            # Support for .ods using odfpy
+            def _ods_set_cell_value(rows, row_idx, col_idx, value):
+                if row_idx >= len(rows): return
+                cells = rows[row_idx].getElementsByType(TableCell)
+                while len(cells) <= col_idx:
+                    new_cell = TableCell()
+                    rows[row_idx].addElement(new_cell)
+                    cells = rows[row_idx].getElementsByType(TableCell)
+                cell = cells[col_idx]
+                for old_p in cell.getElementsByType(P):
+                    cell.removeChild(old_p)
+                cell.setAttribute('valuetype', 'string')
+                p = P(text=value)
+                cell.addElement(p)
+                
+            try:
+                # Use pandas to find indices quickly
+                df_ods = pd.read_excel(caminho_planilha, sheet_name=None, header=None, engine='odf')
+                aba_nome = 'FGTS EM ATRASO - PROCESSOS' if 'FGTS EM ATRASO - PROCESSOS' in df_ods else list(df_ods.keys())[0]
+                aba = df_ods[aba_nome]
+                indices_ods = []
+                for i in range(len(aba)):
+                    try:
+                        val_pis = normalizar_pis(aba.iloc[i, 2])
+                        if not val_pis:
+                            val_pis = normalizar_pis(aba.iloc[i, 1])
+                    except:
+                        val_pis = ""
+                    if val_pis == pis_alvo:
+                        try:
+                            val_nome = str(aba.iloc[i, 3]).strip().upper()
+                            if val_nome != novo_nome:
+                                indices_ods.append(i) # 0-indexed pandas matches doc rows generally well enough in this context, but better to just use df
+                        except:
+                            pass
+                            
+                if indices_ods:
+                    doc = opendocument.load(caminho_planilha)
+                    tables = doc.spreadsheet.getElementsByType(Table)
+                    table = None
+                    for t in tables:
+                        if t.getAttribute('name') == 'FGTS EM ATRASO - PROCESSOS':
+                            table = t
+                            break
+                    if table is None and tables:
+                        table = tables[0]
+                        
+                    if table:
+                        rows = table.getElementsByType(TableRow)
+                        for idx in indices_ods:
+                            _ods_set_cell_value(rows, idx, 3, novo_nome)
+                            alterados_nesta += 1
+                        doc.save(caminho_planilha)
+            except Exception as e:
+                print(f"Erro ao salvar ods físico: {e}")
+                
         else:
             try:
                 wb = load_workbook(caminho_planilha)
