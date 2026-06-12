@@ -737,7 +737,7 @@ def analisar_conciliacao():
 def corrigir_xls_fisico():
     data = request.json
     pis_alvo = normalizar_pis(data.get('pis'))
-    novo_nome = data.get('novo_nome')
+    novo_nome = str(data.get('novo_nome', '')).strip().upper()
     
     if not pis_alvo or not novo_nome:
         return jsonify({'ok': False, 'erro': 'PIS ou Novo Nome faltando.'})
@@ -757,12 +757,17 @@ def corrigir_xls_fisico():
             for row in range(sheet.nrows):
                 try:
                     val_pis = normalizar_pis(sheet.cell_value(row, 2))
+                    if not val_pis:
+                        val_pis = normalizar_pis(sheet.cell_value(row, 1))
                 except:
                     val_pis = ""
                 if val_pis == pis_alvo:
-                    val_nome = str(sheet.cell_value(row, 3)).strip().upper()
-                    if val_nome != novo_nome:
-                        indices.append(row)
+                    try:
+                        val_nome = str(sheet.cell_value(row, 3)).strip().upper()
+                        if val_nome != novo_nome:
+                            indices.append(row)
+                    except:
+                        pass
         except Exception as e:
             print(f"Erro xlrd: {e}")
         return indices
@@ -816,12 +821,18 @@ def corrigir_xls_fisico():
                     ws = wb.active
                     
                 for row in range(1, ws.max_row + 1):
-                    val_pis = ws.cell(row=row, column=3).value
-                    val_nome = ws.cell(row=row, column=4).value
-                    if normalizar_pis(val_pis) == pis_alvo:
-                        if str(val_nome).strip().upper() != novo_nome:
-                            ws.cell(row=row, column=4).value = novo_nome
-                            alterados_nesta += 1
+                    val_pis = normalizar_pis(ws.cell(row=row, column=3).value)
+                    if not val_pis:
+                        val_pis = normalizar_pis(ws.cell(row=row, column=2).value)
+                        
+                    if val_pis == pis_alvo:
+                        try:
+                            val_nome = str(ws.cell(row=row, column=4).value).strip().upper()
+                            if val_nome != novo_nome:
+                                ws.cell(row=row, column=4).value = novo_nome
+                                alterados_nesta += 1
+                        except:
+                            pass
                             
                 if alterados_nesta > 0:
                     wb.save(caminho_planilha)
