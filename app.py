@@ -734,51 +734,118 @@ def analisar_conciliacao():
 @app.route('/api/corrigir-xls-fisico', methods=['POST'])
 def corrigir_xls_fisico():
     data = request.json
-    caminho_planilha = data.get('caminho_planilha')
     pis_alvo = normalizar_pis(data.get('pis'))
     novo_nome = data.get('novo_nome')
-    comp = data.get('competencia')
     
-    if not os.path.exists(caminho_planilha):
-        return jsonify({'ok': False, 'erro': 'Arquivo xls/xlsx não encontrado fisicamente.'})
+    if not pis_alvo or not novo_nome:
+        return jsonify({'ok': False, 'erro': 'PIS ou Novo Nome faltando.'})
         
-    ext = os.path.splitext(caminho_planilha)[1].lower()
-    caminho_xlsx = caminho_planilha
+    arquivos_alterados = 0
+    linhas_alteradas = 0
     
-    if ext == '.xls':
-        caminho_xlsx = converter_xls_para_xlsx(caminho_planilha)
-        if not caminho_xlsx:
-            return jsonify({'ok': False, 'erro': 'Falha ao converter .xls para .xlsx. O Excel precisa estar instalado.'})
+    # Varre TODAS as planilhas carregadas
+    for comp, p_data in _state['planilhas'].items():
+        df = p_data['df']
+        
+        # Verifica na memória se este PIS existe nessa planilha
+        mascara = df['PIS'].apply(normalizar_pis) == pis_alvo
+        if not mascara.any():
+            continue
             
-    try:
-        wb = load_workbook(caminho_xlsx)
+        # PIS existe, vamos abrir o arquivo físico
+        caminho_planilha = p_data['caminho']
+        if not os.path.exists(caminho_planilha):
+            continue
+            
+        ext = os.path.splitext(caminho_planilha)[1].lower()
+        caminho_xlsx = caminho_planilha
+        
+        if ext == '.xls':
+            caminho_xlsx = converter_xls_para_xlsx(caminho_planilha)
+            if not caminho_xlsx:
+                continue
+                
         try:
-            ws = wb['FGTS EM ATRASO - PROCESSOS']
-        except:
-            ws = wb.active
-            
-        alterados = 0
-        # A varredura de PIS na coluna C (3) e Nome na coluna D (4)
-        for row in range(1, ws.max_row + 1):
-            val_pis = ws.cell(row=row, column=3).value
-            if normalizar_pis(val_pis) == pis_alvo:
-                ws.cell(row=row, column=4).value = novo_nome
-                alterados += 1
+            wb = load_workbook(caminho_xlsx)
+            try:
+                ws = wb['FGTS EM ATRASO - PROCESSOS']
+            except:
+                ws = wb.active
                 
-        wb.save(caminho_xlsx)
+            alterados_nesta_planilha = 0
+            for row in range(1, ws.max_row + 1):
+                val_pis = ws.cell(row=row, column=3).value
+                if normalizar_pis(val_pis) == pis_alvo:
+                    # Atualiza o nome na coluna 4
+                    ws.cell(row=row, column=4).value = novo_nome
+                    alterados_nesta_planilha += 1
+                    
+            if alterados_nesta_planilha > 0:
+                wb.save(caminho_xlsx)
+                arquivos_alterados += 1
+                linhas_alteradas += alterados_nesta_planilha
+                
+                # Atualiza na memoria
+                _state['planilhas'][comp]['caminho'] = caminho_xlsx
+                novo_df = confinicial.ler_planilha_fgts(caminho_xlsx)
+                if novo_df is not None:
+                    _state['planilhas'][comp]['df'] = novo_df
+                    
+        except Exception as e:
+            print(f"Erro ao salvar xls físico em lote: {e}")
+            
+    return jsonify({
+        'ok': True, 
+        'arquivos_alterados': arquivos_alterados, 
+        'linhas_alteradas': linhas_alteradas
+    })
+
+@app.route('/api/renomear-pdf-conciliacao', methods=['POST'])
+def renomear_pdf_conciliacao():
+    data = request.json
+    comp = data.get('competencia')
+    nome_antigo = data.get('nome_antigo')
+    nome_novo = data.get('nome_novo')
+    
+    if not comp or not nome_antigo or not nome_novo:
+        return jsonify({'ok': False, 'erro': 'Dados incompletos para renomear.'})
         
-        # Atualiza em memória o df
-        if comp in _state['planilhas']:
-            # Se era .xls e virou .xlsx, atualiza o caminho na memoria
-            _state['planilhas'][comp]['caminho'] = caminho_xlsx
-            df = _state['planilhas'][comp]['df']
-            
-            # Recarrega a planilha recem salva para memoria
-            novo_df = confinicial.ler_planilha_fgts(caminho_xlsx)
-            if novo_df is not None:
-                _state['planilhas'][comp]['df'] = novo_df
+    if not _state['pasta_raiz']:
+        return jsonify({'ok': False, 'erro': 'Pasta raiz de PDFs não configurada.'})
+        
+    # Encontra a subpasta correta
+    pasta_pdfs = None
+    for d in os.listdir(_state['pasta_raiz']):
+        caminho_dir = os.path.join(_state['pasta_raiz'], d)
+        if os.path.isdir(caminho_dir):
+            m, a = confinicial.extrair_competencia_pasta(d)
+            if f"{m}-{a}" == comp:
+                pasta_pdfs = caminho_dir
+                break
                 
-        return jsonify({'ok': True, 'alterados': alterados, 'novo_caminho': caminho_xlsx})
+    if not pasta_pdfs:
+        return jsonify({'ok': False, 'erro': f'Pasta de PDFs para a competência {comp} não encontrada.'})
+        
+    caminho_antigo = os.path.join(pasta_pdfs, nome_antigo + '.pdf')
+    caminho_novo = os.path.join(pasta_pdfs, nome_novo + '.pdf')
+    
+    # Se o nome antigo nao existir com .pdf, tenta procurar
+    if not os.path.exists(caminho_antigo):
+        encontrou = False
+        for f in os.listdir(pasta_pdfs):
+            if f.lower().endswith('.pdf') and os.path.splitext(f)[0] == nome_antigo:
+                caminho_antigo = os.path.join(pasta_pdfs, f)
+                encontrou = True
+                break
+        if not encontrou:
+            return jsonify({'ok': False, 'erro': 'Arquivo PDF antigo não encontrado na pasta física.'})
+            
+    if os.path.exists(caminho_novo):
+        return jsonify({'ok': False, 'erro': 'Já existe um arquivo com este novo nome na pasta.'})
+        
+    try:
+        os.rename(caminho_antigo, caminho_novo)
+        return jsonify({'ok': True})
     except Exception as e:
         return jsonify({'ok': False, 'erro': str(e)})
 
