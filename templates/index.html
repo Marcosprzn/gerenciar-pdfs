@@ -299,33 +299,6 @@
     <div class="modal-actions">
       <button class="btn btn-outline" onclick="closeModal()">✕ Fechar</button>
     </div>
-    </div>
-  </div>
-
-  <!-- ─── Modal Resolução ─────────────────────────────────────── -->
-  <div class="modal-overlay" id="modal-resolucao">
-    <div class="modal-content" style="max-width:500px;">
-      <h3 style="margin-bottom:15px; border-bottom:1px solid var(--border); padding-bottom:10px;">🛠️ Onde está o erro?</h3>
-      <p style="color:var(--text2); margin-bottom:20px;">Identificamos nomes diferentes. De quem é a culpa pela divergência?</p>
-      
-      <div style="background:var(--bg3); padding:15px; border-radius:8px; border:1px solid var(--border); margin-bottom:15px;">
-        <h4 style="color:var(--red); margin-bottom:5px;">A Planilha está errada (.xls)</h4>
-        <p style="font-size:12px; color:var(--text2); margin-bottom:10px;">Corrigiremos permanentemente <b>todas as planilhas</b> carregadas que tiverem este mesmo PIS.</p>
-        <button class="btn btn-red" id="btn-resolver-xls" style="width:100%; justify-content:center;">Corrigir Planilhas IN-SIDE</button>
-      </div>
-
-      <div style="background:var(--bg3); padding:15px; border-radius:8px; border:1px solid var(--border); margin-bottom:15px;">
-        <h4 style="color:var(--blue); margin-bottom:5px;">O PDF está errado (.pdf)</h4>
-        <p style="font-size:12px; color:var(--text2); margin-bottom:10px;">Renomearemos fisicamente o arquivo do PDF na pasta raiz desta competência.</p>
-        <button class="btn btn-blue" id="btn-resolver-pdf" style="width:100%; justify-content:center;">Renomear Arquivo PDF</button>
-      </div>
-
-      <div class="modal-actions">
-        <button class="btn btn-outline" onclick="document.getElementById('modal-resolucao').classList.remove('show')">Cancelar</button>
-      </div>
-    </div>
-  </div>
-
   <!-- ─── Aba: Conciliação ────────────────────────────────────── -->
   <div id="tab-conciliacao" class="tab-content">
     <div class="card">
@@ -1152,8 +1125,8 @@ window.showAuditTab = function(comp) {
               <td>${e.pis}</td>
               <td style="color:var(--red);">${e.nome_planilha}</td>
               <td style="color:var(--blue); font-weight:bold;">${e.nome_pdf}</td>
-              <td style="width:200px;">
-                <button class="btn btn-blue btn-sm" onclick="openResolutionModal('${e.pis}', '${escape(e.nome_planilha)}', '${escape(e.nome_pdf)}', '${comp}')">🛠️ Resolver Divergência</button>
+              <td style="width:200px; position:relative;">
+                <button class="btn btn-blue btn-sm" onclick="toggleResolutionDrop(this, '${e.pis}', '${escape(e.nome_planilha)}', '${escape(e.nome_pdf)}', '${comp}')">🛠️ Resolver Divergência</button>
               </td>
             </tr>
           `).join('')}
@@ -1212,52 +1185,61 @@ window.showAuditTab = function(comp) {
   contentDiv.innerHTML = html;
 }
 
-window.openResolutionModal = function(pis, nome_planilha, nome_pdf, comp) {
-  const modal = document.getElementById('modal-resolucao');
+window.toggleResolutionDrop = function(btn, pis, nome_planilha, nome_pdf, comp) {
+  // Fecha se já tiver aberto
+  document.querySelectorAll('.res-dropdown').forEach(e => e.remove());
   
-  const btnXls = document.getElementById('btn-resolver-xls');
-  const btnPdf = document.getElementById('btn-resolver-pdf');
+  const div = document.createElement('div');
+  div.className = 'res-dropdown card';
+  div.style = 'position:absolute; right:0; top:100%; z-index:100; padding:10px; box-shadow:0 5px 15px rgba(0,0,0,0.5); width:220px; display:flex; flex-direction:column; gap:8px; border:1px solid var(--border2);';
   
-  // Limpa eventos antigos clonando os botoes
-  const newBtnXls = btnXls.cloneNode(true);
-  const newBtnPdf = btnPdf.cloneNode(true);
-  btnXls.parentNode.replaceChild(newBtnXls, btnXls);
-  btnPdf.parentNode.replaceChild(newBtnPdf, btnPdf);
+  div.innerHTML = `
+    <button class="btn btn-red btn-sm" style="width:100%; justify-content:center;" onclick="execResXls('${pis}', '${escape(nome_pdf)}')">Corrigir .xls (IN-SIDE)</button>
+    <button class="btn btn-blue btn-sm" style="width:100%; justify-content:center;" onclick="execResPdf('${comp}', '${escape(nome_pdf)}', '${escape(nome_planilha)}')">Renomear .pdf</button>
+  `;
   
-  newBtnXls.onclick = async () => {
-    modal.classList.remove('show');
-    toast('Aplicando correção em lote nas planilhas...', 'info');
-    const r = await post('/api/corrigir-xls-fisico', {
-      pis: pis,
-      novo_nome: nome_pdf
+  btn.parentNode.appendChild(div);
+  
+  // Click outside fecha
+  setTimeout(() => {
+    window.addEventListener('click', function closeDrop(e) {
+      if (!div.contains(e.target) && e.target !== btn) {
+        div.remove();
+        window.removeEventListener('click', closeDrop);
+      }
     });
-    
-    if (r.ok) {
-      toast(`Lote: ${r.arquivos_alterados} planilhas e ${r.linhas_alteradas} linhas alteradas fisicamente!`, 'success');
-      analisarConciliacao();
-    } else {
-      toast('Erro ao alterar: ' + r.erro, 'error');
-    }
-  };
+  }, 10);
+}
+
+window.execResXls = async function(pis, novo_nome) {
+  toast('Aplicando correção em lote nas planilhas...', 'info');
+  const r = await post('/api/corrigir-xls-fisico', {
+    pis: pis,
+    novo_nome: novo_nome
+  });
   
-  newBtnPdf.onclick = async () => {
-    modal.classList.remove('show');
-    toast('Renomeando arquivo PDF fisicamente...', 'info');
-    const r = await post('/api/renomear-pdf-conciliacao', {
-      competencia: comp,
-      nome_antigo: nome_pdf,
-      nome_novo: nome_planilha
-    });
-    
-    if (r.ok) {
-      toast('PDF renomeado com sucesso!', 'success');
-      analisarConciliacao();
-    } else {
-      toast('Erro ao renomear PDF: ' + r.erro, 'error');
-    }
-  };
+  if (r.ok) {
+    toast(`Lote: ${r.arquivos_alterados} planilhas e ${r.linhas_alteradas} linhas alteradas fisicamente!`, 'success');
+    analisarConciliacao();
+  } else {
+    toast('Erro ao alterar: ' + r.erro, 'error');
+  }
+}
+
+window.execResPdf = async function(comp, nome_antigo, nome_novo) {
+  toast('Renomeando arquivo PDF fisicamente...', 'info');
+  const r = await post('/api/renomear-pdf-conciliacao', {
+    competencia: comp,
+    nome_antigo: nome_antigo,
+    nome_novo: nome_novo
+  });
   
-  modal.classList.add('show');
+  if (r.ok) {
+    toast('PDF renomeado com sucesso!', 'success');
+    analisarConciliacao();
+  } else {
+    toast('Erro ao renomear PDF: ' + r.erro, 'error');
+  }
 }
 
 function escape(html) {
