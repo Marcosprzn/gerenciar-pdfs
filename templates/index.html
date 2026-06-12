@@ -265,8 +265,11 @@
     <button class="tab-btn" onclick="showTab('correcao')">
       💡 Sugestões Inteligentes
     </button>
-    <button class="tab-btn" onclick="showTab('busca')">
-      🔍 Buscar Pessoa
+    <button class="tab-btn" onclick="showTab('pastas')">
+      📂 Renomear Arquivos
+    </button>
+    <button class="tab-btn" onclick="showTab('conciliacao')">
+      📊 Conciliação
     </button>
     <button class="tab-btn" onclick="showTab('historico')">
       🕒 Histórico
@@ -294,8 +297,31 @@
     <div class="modal-actions">
       <button class="btn btn-outline" onclick="closeModal()">✕ Fechar</button>
     </div>
+    </div>
   </div>
-</div>
+
+  <!-- ─── Aba: Conciliação ────────────────────────────────────── -->
+  <div id="tab-conciliacao" class="tab-content">
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+        <h2>📊 Dashboard de Conciliação</h2>
+        <div>
+          <button class="btn btn-blue" onclick="carregarPlanilhas()">📄 Carregar Planilhas .xls</button>
+          <button class="btn btn-red" onclick="limparConciliacao()">🗑️ Limpar Tudo</button>
+          <button class="btn btn-green" onclick="gerarConciliacao()">🚀 Gerar Conciliação e Organizar Pastas</button>
+        </div>
+      </div>
+      <p style="color:var(--text2); margin-bottom:20px;">Carregue planilhas do FGTS. O sistema fará a varredura cruzando o PIS para achar nomes diferentes, e ao gerar ele fará o match com os PDFs da Pasta Raiz, salvará os Excel com cores e dividirá nas pastas 115 e 660.</p>
+      
+      <div id="conciliacao-cards" style="display:flex; flex-wrap:wrap; gap:15px; margin-bottom:30px;">
+        <!-- Cards das competencias carregadas aparecerao aqui -->
+      </div>
+      
+      <div id="conciliacao-conflitos">
+        <!-- Conflitos de PIS aparecerao aqui -->
+      </div>
+    </div>
+  </div>
 
 <!-- ─── Main ────────────────────────────────────────────────── -->
 <main>
@@ -890,6 +916,112 @@ function showLoading(msg) {
 }
 function hideLoading() {
   document.getElementById('loading').classList.remove('show');
+}
+
+// ==========================================
+// LÓGICA DE CONCILIAÇÃO E DASHBOARD
+// ==========================================
+
+async function carregarPlanilhas() {
+  const r = await post('/api/carregar-planilhas', {});
+  if (r.ok) {
+    if (r.erros && r.erros.length > 0) {
+      toast(`Carregadas: ${r.sucessos}. Erros: ${r.erros.length}`, 'error');
+    } else {
+      toast(`${r.sucessos} planilhas carregadas!`, 'success');
+    }
+    carregarStatusConciliacao();
+  } else {
+    toast(r.erro || 'Erro ao carregar', 'error');
+  }
+}
+
+async function carregarStatusConciliacao() {
+  const r = await get('/api/status-conciliacao');
+  if (!r.ok) return;
+  
+  const divCards = document.getElementById('conciliacao-cards');
+  const divConflitos = document.getElementById('conciliacao-conflitos');
+  
+  // Renderiza cards
+  if (r.cards.length === 0) {
+    divCards.innerHTML = '<p style="color:var(--text2);">Nenhuma planilha carregada ainda.</p>';
+  } else {
+    divCards.innerHTML = r.cards.map(c => `
+      <div style="background:var(--bg3); padding:15px; border-radius:8px; border:1px solid var(--border); min-width:200px;">
+        <h3 style="margin:0 0 10px 0; color:var(--text);">${c.competencia}</h3>
+        <p style="margin:0; font-size:12px; color:var(--text2);">${c.arquivo}</p>
+        <p style="margin:10px 0 0 0; font-weight:bold; color:var(--blue);">${c.total} registros</p>
+      </div>
+    `).join('');
+  }
+  
+  // Renderiza conflitos
+  if (r.conflitos.length === 0) {
+    if (r.cards.length > 0) {
+      divConflitos.innerHTML = `
+        <div style="background:rgba(0, 200, 83, 0.1); border-left:4px solid var(--green); padding:15px; border-radius:4px;">
+          <h3 style="margin:0; color:var(--green);">✅ Tudo Certo!</h3>
+          <p style="margin:5px 0 0 0; color:var(--text);">Nenhum conflito de PIS detectado nas planilhas carregadas. Você já pode gerar a conciliação.</p>
+        </div>
+      `;
+    } else {
+      divConflitos.innerHTML = '';
+    }
+  } else {
+    divConflitos.innerHTML = `
+      <h3 style="color:var(--red); border-bottom:1px solid var(--border); padding-bottom:10px;">⚠️ ${r.conflitos.length} Divergências de PIS Encontradas</h3>
+      <p style="color:var(--text2); margin-bottom:15px;">Abaixo estão os funcionários que possuem o mesmo PIS, mas nomes diferentes nas planilhas. Clique no nome correto para corrigir em todas as planilhas carregadas.</p>
+      ${r.conflitos.map(c => `
+        <div style="background:var(--bg3); padding:15px; border-radius:8px; border:1px solid var(--border); margin-bottom:15px;">
+          <h4 style="margin:0 0 10px 0;">PIS: <span style="color:var(--blue);">${c.pis}</span></h4>
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            ${c.opcoes.map(op => `
+              <button class="btn ${op.nome === c.sugerido ? 'btn-green' : 'btn-blue'}" 
+                      style="flex:1; text-align:left; justify-content:space-between;"
+                      onclick="corrigirPIS('${c.pis}', '${escape(op.nome)}')">
+                <span>${escape(op.nome)}</span>
+                <span style="font-size:11px; opacity:0.8; margin-left:10px;">nas planilhas: ${op.competencias.join(', ')}</span>
+              </button>
+            `).join('')}
+          </div>
+        </div>
+      `).join('')}
+    `;
+  }
+}
+
+async function corrigirPIS(pis, novo_nome) {
+  const r = await post('/api/corrigir-pis', {pis, novo_nome});
+  if (r.ok) {
+    toast(`PIS corrigido em ${r.afetados} registros!`, 'success');
+    carregarStatusConciliacao();
+  } else {
+    toast('Erro: ' + r.erro, 'error');
+  }
+}
+
+async function limparConciliacao() {
+  if(!confirm('Tem certeza que deseja limpar as planilhas carregadas?')) return;
+  const r = await post('/api/limpar-conciliacao', {});
+  if (r.ok) {
+    carregarStatusConciliacao();
+    toast('Planilhas removidas', 'info');
+  }
+}
+
+async function gerarConciliacao() {
+  toast('Gerando arquivos... Escolha a pasta e aguarde.', 'info');
+  const r = await post('/api/gerar-conciliacao', {});
+  if (r.ok) {
+    toast(`Geração concluída na pasta: ${r.destino}`, 'success');
+    if (r.resultados) {
+      alert("Concluído!\n\n" + r.resultados.join("\n"));
+    }
+    carregarStatusConciliacao();
+  } else {
+    toast('Erro: ' + r.erro, 'error');
+  }
 }
 
 function escape(html) {

@@ -11,6 +11,11 @@ from watchdog.events import FileSystemEventHandler
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import llm_matcher
+import confinicial
+import pandas as pd
+import tkinter as tk
+from tkinter import filedialog
 
 app = Flask(__name__)
 app.secret_key = 'gerenciador_pdfs_2024'
@@ -21,7 +26,8 @@ _state = {
     'pastas_ref': [],
     'nomes_ref': [],      # nomes normalizados de todas as pastas de referência
     'analise': None,
-    'needs_update': False
+    'needs_update': False,
+    'planilhas': {}       # { '01-2008': {'caminho': '...', 'df': DataFrame, 'nome_original': '...'} }
 }
 
 HISTORICO_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'historico.json')
@@ -453,6 +459,193 @@ def renomear():
     except Exception as e:
         add_historico('Busca (Individual)', arquivo, novo_nome, os.path.basename(pasta_path), 'Erro', str(e))
         return jsonify({'ok': False, 'erro': str(e)})
+
+# ─── Conciliação de Planilhas ──────────────────────────────────────────
+
+@app.route('/api/carregar-planilhas', methods=['POST'])
+def carregar_planilhas():
+    root = tk.Tk(); root.withdraw(); root.attributes('-topmost', True)
+    caminhos = filedialog.askopenfilenames(
+        title="Selecione as Planilhas FGTS",
+        filetypes=[("Planilhas", "*.xlsx *.xls *.ods"), ("Todos", "*.*")]
+    )
+    root.destroy()
+    
+    if not caminhos:
+        return jsonify({'ok': False, 'erro': 'Nenhum arquivo selecionado'})
+        
+    sucessos = 0
+    erros = []
+    
+    for c in caminhos:
+        mes, ano = confinicial.extrair_competencia_excel(os.path.basename(c))
+        if not mes or not ano:
+            erros.append(f"Não foi possível extrair a competência do arquivo: {os.path.basename(c)}")
+            continue
+            
+        comp_str = f"{mes}-{ano}"
+        df = confinicial.ler_planilha_fgts(c)
+        if df is None or df.empty:
+            erros.append(f"Planilha sem dados válidos ou falha na leitura: {os.path.basename(c)}")
+            continue
+            
+        _state['planilhas'][comp_str] = {
+            'caminho': c,
+            'nome_original': os.path.basename(c),
+            'df': df
+        }
+        sucessos += 1
+        
+    return jsonify({'ok': True, 'sucessos': sucessos, 'erros': erros})
+
+@app.route('/api/status-conciliacao', methods=['GET'])
+def status_conciliacao():
+    if not _state['planilhas']:
+        return jsonify({'ok': True, 'cards': [], 'conflitos': []})
+        
+    # Agrupa por competência para os cards
+    cards = []
+    pis_dict = {} # PIS -> dict de nomes (nome -> lista de competencias)
+    
+    for comp, p_data in _state['planilhas'].items():
+        df = p_data['df']
+        cards.append({
+            'competencia': comp,
+            'arquivo': p_data['nome_original'],
+            'total': len(df)
+        })
+        
+        for idx, row in df.iterrows():
+            pis = str(row['PIS']).strip()
+            nome = str(row['NOMES']).strip()
+            if pis and nome and str(pis).lower() not in ('nan', 'none', ''):
+                if pis not in pis_dict:
+                    pis_dict[pis] = {}
+                # normalizar espacos para comparação
+                n_clean = " ".join(nome.split())
+                if n_clean not in pis_dict[pis]:
+                    pis_dict[pis][n_clean] = []
+                if comp not in pis_dict[pis][n_clean]:
+                    pis_dict[pis][n_clean].append(comp)
+                    
+    # Encontra conflitos
+    conflitos = []
+    # Usar _state['nomes_ref'] (normalizado) para sugerir melhor nome
+    nomes_ref_norm = _state['nomes_ref']
+    
+    for pis, nomes_map in pis_dict.items():
+        if len(nomes_map) > 1:
+            opcoes = list(nomes_map.keys())
+            # Tenta achar um que bate com a pasta de referencia
+            sugerido = None
+            for op in opcoes:
+                if normalizar(op) in nomes_ref_norm:
+                    sugerido = op
+                    break
+            if not sugerido:
+                sugerido = sorted(opcoes, key=len, reverse=True)[0]
+                
+            opcoes_detalhe = []
+            for op in opcoes:
+                opcoes_detalhe.append({
+                    'nome': op,
+                    'competencias': nomes_map[op]
+                })
+                
+            conflitos.append({
+                'pis': pis,
+                'opcoes': opcoes_detalhe,
+                'sugerido': sugerido
+            })
+            
+    # Ordena cards
+    cards.sort(key=lambda x: x['competencia'])
+    return jsonify({'ok': True, 'cards': cards, 'conflitos': conflitos})
+
+@app.route('/api/corrigir-pis', methods=['POST'])
+def corrigir_pis():
+    data = request.json
+    pis = str(data.get('pis')).strip()
+    novo_nome = data.get('novo_nome', '').strip()
+    
+    if not pis or not novo_nome:
+        return jsonify({'ok': False, 'erro': 'Dados incompletos'})
+        
+    afetados = 0
+    for comp, p_data in _state['planilhas'].items():
+        df = p_data['df']
+        # Usamos apply/lambda pra converter column pra str sem alterar tipo original
+        mascara = df['PIS'].astype(str).str.strip() == pis
+        if mascara.any():
+            # Acha os que estao diferentes
+            diferentes = mascara & (df['NOMES'] != novo_nome)
+            qtd = diferentes.sum()
+            if qtd > 0:
+                df.loc[diferentes, 'NOMES'] = novo_nome
+                afetados += qtd
+                
+    return jsonify({'ok': True, 'afetados': int(afetados)})
+
+@app.route('/api/limpar-conciliacao', methods=['POST'])
+def limpar_conciliacao():
+    _state['planilhas'] = {}
+    return jsonify({'ok': True})
+
+@app.route('/api/gerar-conciliacao', methods=['POST'])
+def gerar_conciliacao():
+    if not _state['pasta_raiz']:
+        return jsonify({'ok': False, 'erro': 'Selecione a Pasta Raiz de PDFs na aba de Configuração primeiro.'})
+    if not _state['planilhas']:
+        return jsonify({'ok': False, 'erro': 'Nenhuma planilha carregada.'})
+        
+    root = tk.Tk(); root.withdraw(); root.attributes('-topmost', True)
+    pasta_destino = filedialog.askdirectory(title="Selecione a PASTA DE DESTINO para salvar os relatórios e organizar")
+    root.destroy()
+    
+    if not pasta_destino:
+        return jsonify({'ok': False, 'erro': 'Geração cancelada (nenhuma pasta destino selecionada).'})
+        
+    # Mapear as subpastas da raiz por competencia
+    mapa_pastas = {}
+    for d in os.listdir(_state['pasta_raiz']):
+        caminho_dir = os.path.join(_state['pasta_raiz'], d)
+        if os.path.isdir(caminho_dir):
+            mes, ano = confinicial.extrair_competencia_pasta(d)
+            if mes and ano:
+                mapa_pastas[f"{mes}-{ano}"] = caminho_dir
+
+    resultados = []
+    
+    for comp, p_data in _state['planilhas'].items():
+        df = p_data['df'].copy()
+        nome_orig = p_data['nome_original']
+        
+        pasta_pdfs = mapa_pastas.get(comp)
+        if not pasta_pdfs:
+            # Planilha sem pasta correspondente
+            df['Status PDF'] = "PASTA NÃO ENCONTRADA"
+            df['Nome do Arquivo Encontrado'] = ""
+            df_final = df
+            total_pdfs = 0
+        else:
+            total_pdfs = len([f for f in os.listdir(pasta_pdfs) if f.lower().endswith('.pdf')])
+            # Executa a verificação principal
+            df_final = confinicial.verificar_pdfs(df, pasta_pdfs)
+            # Organiza os arquivos
+            confinicial.organizar_pdfs_por_resultado(df_final, pasta_pdfs, pasta_destino)
+            
+        # Salva o arquivo de relatorio
+        nome_saida = f"Conciliacao_{comp}.xlsx"
+        caminho_saida = os.path.join(pasta_destino, nome_saida)
+        try:
+            confinicial.salvar_com_resumo(df_final, caminho_saida, total_pdfs=total_pdfs)
+            resultados.append(f"Gerado: {nome_saida}")
+        except Exception as e:
+            resultados.append(f"Erro ao salvar {nome_saida}: {str(e)}")
+            
+    # Ao final da geracao, limpa o estado
+    _state['planilhas'] = {}
+    return jsonify({'ok': True, 'resultados': resultados, 'destino': pasta_destino})
 
 if __name__ == '__main__':
     print('=' * 50)

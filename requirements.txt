@@ -1,2 +1,4 @@
 flask
 watchdog
+pandas
+openpyxl
