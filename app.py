@@ -736,6 +736,50 @@ def analisar_conciliacao():
 
     return jsonify({'ok': True, 'resultados': resultados_audit})
 
+@app.route('/api/buscar-planilhas', methods=['POST'])
+def buscar_planilhas():
+    termo = normalizar(request.json.get('termo', ''))
+    if not termo or len(termo) < 3:
+        return jsonify({'ok': False, 'erro': 'Digite pelo menos 3 caracteres'})
+        
+    if not _state['planilhas']:
+        return jsonify({'ok': False, 'erro': 'Nenhuma planilha carregada. Carregue as planilhas na aba de Conciliação primeiro.'})
+        
+    # Verify if term is digits only (PIS search)
+    termo_pis = normalizar_pis(termo) if len(re.sub(r'\D', '', termo)) >= 10 else None
+    
+    resultados_dict = {}
+    
+    for comp, p_data in _state['planilhas'].items():
+        df = p_data['df']
+        for idx, row in df.iterrows():
+            pis = normalizar_pis(row.get('PIS', ''))
+            nome_raw = str(row.get('NOMES', ''))
+            nome_norm = normalizar(nome_raw)
+            
+            match = False
+            if termo_pis and pis == termo_pis:
+                match = True
+            elif not termo_pis and (termo in nome_norm or similaridade(termo, nome_norm) > 0.6):
+                match = True
+                
+            if match:
+                chave = f"{pis}::{nome_raw}"
+                if chave not in resultados_dict:
+                    resultados_dict[chave] = {
+                        'pis': pis,
+                        'nome_atual': nome_raw,
+                        'competencias': []
+                    }
+                if comp not in resultados_dict[chave]['competencias']:
+                    resultados_dict[chave]['competencias'].append(comp)
+                    
+    resultados = list(resultados_dict.values())
+    # Sort so that items appearing in more spreadsheets come first
+    resultados.sort(key=lambda x: -len(x['competencias']))
+    
+    return jsonify({'ok': True, 'resultados': resultados})
+
 @app.route('/api/corrigir-xls-fisico', methods=['POST'])
 def corrigir_xls_fisico():
     data = request.json

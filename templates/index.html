@@ -273,6 +273,9 @@
     <button class="tab-btn" onclick="showTab('conciliacao')">
       📊 Conciliação
     </button>
+    <button class="tab-btn" onclick="showTab('editar-planilhas')">
+      📝 Editar Planilhas
+    </button>
     <button class="tab-btn" onclick="showTab('historico')">
       🕒 Histórico
     </button>
@@ -438,6 +441,24 @@
     <div id="search-results"></div>
     <!-- datalist para nomes de referência -->
     <datalist id="nomes-ref-list"></datalist>
+  </div>
+
+  <!-- ═══ Tab: Editar Planilhas ═════════════════════════════ -->
+  <div id="tab-editar-planilhas" class="tab-panel">
+    <div class="card-title" style="font-size:20px; margin-bottom:20px;">
+      📝 Editar Planilhas (Em Lote)
+    </div>
+
+    <div class="card">
+      <p class="text-sm" style="margin-bottom:14px;">Digite o Nome ou PIS para localizar funcionários nas <b>planilhas carregadas</b> (aba Conciliação). Alterações feitas aqui afetarão os arquivos `.xls` físicos.</p>
+      <div class="search-wrap">
+        <input type="search" id="search-planilhas-input" placeholder="Ex: 12345678901 ou JOSE DA SILVA..." autocomplete="off"
+               onkeydown="if(event.key==='Enter') buscarPlanilhas()" />
+        <button class="btn btn-primary" onclick="buscarPlanilhas()">🔍 Buscar nas Planilhas</button>
+      </div>
+    </div>
+
+    <div id="planilhas-search-results"></div>
   </div>
 
   <!-- ═══ Tab 4: Histórico ════════════════════════════════════ -->
@@ -923,6 +944,75 @@ function showLoading(msg) {
 }
 function hideLoading() {
   document.getElementById('loading').classList.remove('show');
+}
+
+// ==========================================
+// ABA: EDITAR PLANILHAS
+// ==========================================
+async function buscarPlanilhas() {
+  const termo = document.getElementById('search-planilhas-input').value.trim();
+  if (termo.length < 3) return toast('Digite pelo menos 3 caracteres', 'warning');
+  
+  showLoading('Buscando nas planilhas...');
+  const res = await post('/api/buscar-planilhas', { termo });
+  hideLoading();
+  
+  if (!res.ok) return toast(res.erro, 'error');
+  
+  const container = document.getElementById('planilhas-search-results');
+  if (res.resultados.length === 0) {
+    container.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text2);">Nenhum funcionário encontrado nas planilhas.</div>`;
+    return;
+  }
+  
+  let html = `<div style="margin-bottom:15px; color:var(--text2); font-size:13px;">${res.resultados.length} resultados encontrados:</div>`;
+  
+  html += `<table style="width:100%; border-collapse:collapse; background:var(--bg2); border-radius:8px; overflow:hidden;">
+    <thead style="background:var(--bg3);">
+      <tr>
+        <th style="padding:10px; text-align:left; border-bottom:1px solid var(--border);">PIS</th>
+        <th style="padding:10px; text-align:left; border-bottom:1px solid var(--border);">Nome Atual na Planilha</th>
+        <th style="padding:10px; text-align:left; border-bottom:1px solid var(--border);">Aparece em</th>
+        <th style="padding:10px; text-align:left; border-bottom:1px solid var(--border); width:350px;">Ação Lote (Físico)</th>
+      </tr>
+    </thead>
+    <tbody>`;
+    
+  res.resultados.forEach((r, idx) => {
+    html += `
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:10px;">${r.pis}</td>
+        <td style="padding:10px; font-weight:500;">${r.nome_atual}</td>
+        <td style="padding:10px; font-size:11px; color:var(--text2);">${r.competencias.join(', ')}</td>
+        <td style="padding:10px;">
+          <div style="display:flex; gap:8px;">
+            <input type="text" id="novo-nome-planilha-${idx}" value="${escape(r.nome_atual)}" style="flex:1; padding:6px 10px; font-size:12px; border-radius:4px;" />
+            <button class="btn btn-red btn-sm" onclick="renomearPlanilhaLote('${r.pis}', 'novo-nome-planilha-${idx}')">🔄 Atualizar Lote</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  });
+  
+  html += `</tbody></table>`;
+  container.innerHTML = html;
+}
+
+async function renomearPlanilhaLote(pis, inputId) {
+  const novoNome = document.getElementById(inputId).value.trim();
+  if (!novoNome) return toast('Digite o novo nome!', 'error');
+  
+  showLoading('Aplicando alteração no arquivo físico...');
+  const res = await post('/api/corrigir-xls-fisico', { pis: pis, novo_nome: novoNome });
+  hideLoading();
+  
+  if (res.ok) {
+    toast(`Lote: ${res.arquivos_alterados} planilhas e ${res.linhas_alteradas} linhas alteradas fisicamente!`, 'success');
+    // Refresh search results to show updated name
+    buscarPlanilhas();
+  } else {
+    toast('Erro: ' + res.erro, 'error');
+  }
 }
 
 // ==========================================
