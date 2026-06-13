@@ -249,6 +249,17 @@
     p { line-height: 1.6; }
     .section-title { font-weight: 700; font-size: 15px; color: var(--text); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
 
+    /* ─── Sub-Abas (Conciliação) ─── */
+    .subtabs { display: flex; gap: 10px; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-top: 20px; overflow-x: auto; }
+    .subtab-btn {
+      background: none; border: none; color: var(--text2); padding: 8px 16px; font-size: 13px; font-weight: 600;
+      cursor: pointer; border-radius: 8px; transition: all 0.2s; white-space: nowrap;
+    }
+    .subtab-btn:hover { background: var(--bg3); color: var(--text); }
+    .subtab-btn.active { background: rgba(59,130,246,0.15); color: #60a5fa; box-shadow: 0 0 0 1px rgba(59,130,246,0.3); }
+    .subtab-panel { display: none; margin-top: 15px; }
+    .subtab-panel.active { display: block; animation: slideIn 0.3s ease; }
+
     /* Scrollbar */
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
@@ -1202,12 +1213,20 @@ window.showAuditTab = function(comp) {
         <div style="font-size:12px; color:var(--text2);">PDFs Extras</div>
       </div>
     </div>
+    
+    <!-- BOTOES DE ABAS -->
+    <div class="subtabs" id="subtabs-${comp}">
+      <button class="subtab-btn active" onclick="switchSubTab('${comp}', 'erros')">⚠️ Erros Nominais (${data.erros_nominais ? data.erros_nominais.length : 0})</button>
+      <button class="subtab-btn" onclick="switchSubTab('${comp}', 'encontrados')">✅ Encontrados (${data.encontrados ? data.encontrados.length : 0})</button>
+      <button class="subtab-btn" onclick="switchSubTab('${comp}', 'nao_encontrados')">❌ Não Encontrados (${data.nao_encontrados ? data.nao_encontrados.length : 0})</button>
+      <button class="subtab-btn" onclick="switchSubTab('${comp}', 'extras')">🔵 Extras no Diretório (${data.pdfs_extras ? data.pdfs_extras.length : 0})</button>
+    </div>
   `;
   
   // ERROS NOMINAIS
+  html += `<div id="subpanel-${comp}-erros" class="subtab-panel active">`;
   if (data.erros_nominais && data.erros_nominais.length > 0) {
     html += `
-      <h3 style="color:var(--yellow); margin-bottom:10px; font-size:14px; text-transform:uppercase;">⚠️ Possíveis Erros Nominais</h3>
       <table class="table" style="font-size:13px; margin-bottom:25px;">
         <thead>
           <tr><th>PIS</th><th>Nome na Planilha</th><th>Nome no PDF</th><th>Ação</th></tr>
@@ -1226,12 +1245,40 @@ window.showAuditTab = function(comp) {
         </tbody>
       </table>
     `;
+  } else {
+    html += `<div style="padding:20px; text-align:center; color:var(--text2);">Nenhum erro nominal nesta competência. 🎉</div>`;
   }
+  html += `</div>`;
+  
+  // ENCONTRADOS
+  html += `<div id="subpanel-${comp}-encontrados" class="subtab-panel">`;
+  if (data.encontrados && data.encontrados.length > 0) {
+    html += `
+      <table class="table" style="font-size:13px; margin-bottom:25px;">
+        <thead>
+          <tr><th>PIS</th><th>Nome na Planilha</th><th>Nome no PDF</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+          ${data.encontrados.map(e => `
+            <tr>
+              <td>${e.pis}</td>
+              <td>${e.nome_planilha}</td>
+              <td style="font-weight:bold;">${e.nome_pdf}</td>
+              <td style="color:var(--green);">${e.detalhe}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  } else {
+    html += `<div style="padding:20px; text-align:center; color:var(--text2);">Nenhum arquivo encontrado corretamente.</div>`;
+  }
+  html += `</div>`;
   
   // NÃO ENCONTRADOS
+  html += `<div id="subpanel-${comp}-nao_encontrados" class="subtab-panel">`;
   if (data.nao_encontrados && data.nao_encontrados.length > 0) {
     html += `
-      <h3 style="color:var(--red); margin-bottom:10px; font-size:14px; text-transform:uppercase;">❌ Não Encontrados no .PDF</h3>
       <table class="table" style="font-size:13px; margin-bottom:25px;">
         <thead>
           <tr><th>PIS</th><th>Nome na Planilha</th><th>Proc.</th></tr>
@@ -1247,12 +1294,15 @@ window.showAuditTab = function(comp) {
         </tbody>
       </table>
     `;
+  } else {
+    html += `<div style="padding:20px; text-align:center; color:var(--text2);">Nenhum arquivo faltando nesta competência. 🎉</div>`;
   }
+  html += `</div>`;
   
   // PDFs EXTRAS
+  html += `<div id="subpanel-${comp}-extras" class="subtab-panel">`;
   if (data.pdfs_extras && data.pdfs_extras.length > 0) {
     html += `
-      <h3 style="color:var(--blue); margin-bottom:10px; font-size:14px; text-transform:uppercase;">🔵 PDFs Extras (Na pasta, mas não na planilha)</h3>
       <table class="table" style="font-size:13px; margin-bottom:25px;">
         <thead>
           <tr><th>Nome do Arquivo Encontrado</th></tr>
@@ -1264,18 +1314,38 @@ window.showAuditTab = function(comp) {
         </tbody>
       </table>
     `;
+  } else {
+    html += `<div style="padding:20px; text-align:center; color:var(--text2);">Nenhum arquivo extra no diretório.</div>`;
   }
-  
-  if (data.erros_nominais.length === 0 && data.nao_encontrados.length === 0) {
-    html += `
-      <div style="background:rgba(0, 200, 83, 0.1); border-left:4px solid var(--green); padding:15px; border-radius:4px;">
-        <h3 style="margin:0; color:var(--green);">✅ Tudo Certo Aqui!</h3>
-        <p style="margin:5px 0 0 0; color:var(--text);">Nenhuma divergência a ser corrigida nesta competência.</p>
-      </div>
-    `;
-  }
+  html += `</div>`;
   
   contentDiv.innerHTML = html;
+}
+
+window.switchSubTab = function(comp, tabName) {
+  const container = document.getElementById(`subtabs-${comp}`);
+  if (!container) return;
+  
+  // Desativa os botões
+  const btns = container.querySelectorAll('.subtab-btn');
+  btns.forEach(b => b.classList.remove('active'));
+  
+  // Ativa o botão clicado
+  if(tabName === 'erros') btns[0].classList.add('active');
+  if(tabName === 'encontrados') btns[1].classList.add('active');
+  if(tabName === 'nao_encontrados') btns[2].classList.add('active');
+  if(tabName === 'extras') btns[3].classList.add('active');
+  
+  // Esconde os paineis
+  const panels = ['erros', 'encontrados', 'nao_encontrados', 'extras'];
+  panels.forEach(p => {
+    const el = document.getElementById(`subpanel-${comp}-${p}`);
+    if (el) el.classList.remove('active');
+  });
+  
+  // Mostra o painel correto
+  const activePanel = document.getElementById(`subpanel-${comp}-${tabName}`);
+  if (activePanel) activePanel.classList.add('active');
 }
 
 window.toggleResolutionDrop = function(btn, pis, nome_planilha, nome_pdf, comp) {

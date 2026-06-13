@@ -687,6 +687,7 @@ def analisar_conciliacao():
             resultados_audit[comp] = {
                 'erro_pasta': True,
                 'estatisticas': {},
+                'encontrados': [],
                 'erros_nominais': [],
                 'nao_encontrados': [],
                 'pdfs_extras': [],
@@ -707,6 +708,7 @@ def analisar_conciliacao():
             'llm': totais.get('ENCONTRADO VIA LLM', 0)
         }
         
+        encontrados = []
         erros_nominais = []
         nao_encontrados = []
         pdfs_extras = []
@@ -724,10 +726,13 @@ def analisar_conciliacao():
                 nao_encontrados.append({'pis': pis, 'nome_planilha': nome_planilha, 'proc': proc})
             elif status == 'PDF NA PASTA, MAS NÃO NA PLANILHA':
                 pdfs_extras.append({'nome_pdf': nome_pdf})
+            elif status in ['ENCONTRADO', 'ENCONTRADO COMO 115', 'ENCONTRADO COM ABREVIAÇÃO', 'ENCONTRADO VIA LLM']:
+                encontrados.append({'pis': pis, 'nome_planilha': nome_planilha, 'nome_pdf': nome_pdf, 'proc': proc, 'detalhe': str(row.get('Status PDF', ''))})
 
         resultados_audit[comp] = {
             'erro_pasta': False,
             'estatisticas': estatisticas,
+            'encontrados': encontrados,
             'erros_nominais': erros_nominais,
             'nao_encontrados': nao_encontrados,
             'pdfs_extras': pdfs_extras,
