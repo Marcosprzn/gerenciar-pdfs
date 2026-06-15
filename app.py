@@ -486,7 +486,7 @@ def converter_xls_para_xlsx(caminho_xls):
     try:
         import win32com.client, pythoncom
         pythoncom.CoInitialize()
-        xl = win32com.client.Dispatch('Excel.Application')
+        xl = win32com.client.DispatchEx('Excel.Application')
         try:
             xl.DisplayAlerts = False
         except:
@@ -812,8 +812,18 @@ def corrigir_xls_fisico():
         
     arquivos_alterados = 0
     linhas_alteradas = 0
-    
+    avisos = []
+
     # Helper functions
+    def arquivo_em_uso(caminho):
+        """Verifica se o arquivo está aberto/bloqueado (ex: no Excel) antes de tentar editar via COM."""
+        try:
+            with open(caminho, 'r+b'):
+                pass
+            return False
+        except (PermissionError, OSError):
+            return True
+
     def get_correcoes_xls(caminho):
         indices = []
         try:
@@ -851,12 +861,14 @@ def corrigir_xls_fisico():
         
         if ext == '.xls':
             indices = get_correcoes_xls(caminho_planilha)
-            if indices:
+            if indices and arquivo_em_uso(caminho_planilha):
+                avisos.append(f'"{p_data["nome_original"]}" está aberto no Excel — feche o arquivo e tente novamente.')
+            elif indices:
                 import win32com.client
                 import pythoncom
                 try:
                     pythoncom.CoInitialize()
-                    xl = win32com.client.Dispatch('Excel.Application')
+                    xl = win32com.client.DispatchEx('Excel.Application')
                     xl.Application.DisplayAlerts = False
                     xl.Visible = False
                     abs_path = os.path.abspath(caminho_planilha)
@@ -972,9 +984,10 @@ def corrigir_xls_fisico():
                 _state['planilhas'][comp]['df'] = novo_df
 
     return jsonify({
-        'ok': True, 
-        'arquivos_alterados': arquivos_alterados, 
-        'linhas_alteradas': linhas_alteradas
+        'ok': True,
+        'arquivos_alterados': arquivos_alterados,
+        'linhas_alteradas': linhas_alteradas,
+        'avisos': avisos
     })
 
 @app.route('/api/renomear-pdf-conciliacao', methods=['POST'])

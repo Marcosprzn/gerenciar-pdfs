@@ -216,6 +216,7 @@
     .toast-success { background: rgba(16,185,129,0.2); border: 1px solid rgba(16,185,129,0.4); color: #6ee7b7; }
     .toast-error   { background: rgba(239,68,68,0.2);  border: 1px solid rgba(239,68,68,0.4);  color: #fca5a5; }
     .toast-info    { background: rgba(59,130,246,0.2); border: 1px solid rgba(59,130,246,0.4); color: #93c5fd; }
+    .toast-warning { background: rgba(245,158,11,0.2); border: 1px solid rgba(245,158,11,0.4); color: #fcd34d; }
     @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
 
     /* ─── Spinner ─── */
@@ -1025,7 +1026,11 @@ async function renomearPlanilhaLote(pis, inputId) {
   hideLoading();
   
   if (res.ok) {
-    toast(`Lote: ${res.arquivos_alterados} planilhas e ${res.linhas_alteradas} linhas alteradas fisicamente!`, 'success');
+    if (res.avisos && res.avisos.length > 0) {
+      toast(res.avisos.join(' | '), 'warning');
+    } else {
+      toast(`Lote: ${res.arquivos_alterados} planilhas e ${res.linhas_alteradas} linhas alteradas fisicamente!`, 'success');
+    }
     // Refresh search results to show updated name
     buscarPlanilhas();
   } else {
