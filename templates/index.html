@@ -1004,7 +1004,7 @@ async function buscarPlanilhas() {
         <td style="padding:10px; font-size:11px; color:var(--text2);">${r.competencias.join(', ')}</td>
         <td style="padding:10px;">
           <div style="display:flex; gap:8px;">
-            <input type="text" id="novo-nome-planilha-${idx}" value="${escape(r.nome_atual)}" style="flex:1; padding:6px 10px; font-size:12px; border-radius:4px;" />
+            <input type="text" id="novo-nome-planilha-${idx}" value="${String(r.nome_atual).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;')}" style="flex:1; padding:6px 10px; font-size:12px; border-radius:4px;" />
             <button class="btn btn-red btn-sm" onclick="renomearPlanilhaLote('${r.pis}', 'novo-nome-planilha-${idx}')">🔄 Atualizar Lote</button>
           </div>
         </td>
