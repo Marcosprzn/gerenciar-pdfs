@@ -325,6 +325,17 @@ def shutdown():
     threading.Thread(target=kill_server).start()
     return jsonify({'ok': True})
 
+@app.route('/api/abrir-pdf', methods=['POST'])
+def abrir_pdf():
+    caminho = request.json.get('caminho')
+    if not caminho or not os.path.exists(caminho):
+        return jsonify({'ok': False, 'erro': 'Arquivo não encontrado no computador.'})
+    try:
+        os.startfile(caminho)
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'ok': False, 'erro': f'Erro ao abrir: {str(e)}'})
+
 @app.route('/api/analisar', methods=['POST'])
 def analisar():
     if not _state['pasta_raiz']:

@@ -851,10 +851,17 @@ function buildResultCard(r, idx) {
           <div class="result-meta">📂 ${r.pasta} &nbsp;|&nbsp; arquivo: ${r.arquivo}</div>
         </div>
         <div style="display:flex;align-items:center;gap:10px;">
+          <button class="btn btn-outline btn-sm" onclick="abrirPdf('${escape(r.pasta_path)}', '${escape(r.arquivo)}')">👁️ Abrir</button>
           <span class="sim-pct ${simClass}">${pct}%</span>
         </div>
       </div>
     </div>`;
+}
+
+async function abrirPdf(pasta, arquivo) {
+  const caminho = unescape(pasta) + '\\' + unescape(arquivo);
+  const res = await post('/api/abrir-pdf', { caminho: caminho });
+  if(!res.ok) toast(res.erro, 'error');
 }
 
 function selectAll() {
