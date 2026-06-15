@@ -944,6 +944,14 @@ function toggleAccordion(id) {
 // ────────────────────────────────────────────────
 // Utilities
 // ────────────────────────────────────────────────
+// Formata PIS para o padrão XXX.XXXXX.XX-X
+function formatPIS(pis) {
+  if (!pis) return '';
+  const digits = String(pis).replace(/\D/g, '').padStart(11, '0');
+  if (digits.length !== 11) return pis;
+  return `${digits.slice(0,3)}.${digits.slice(3,8)}.${digits.slice(8,10)}-${digits.slice(10)}`;
+}
+
 async function post(url, data) {
   try {
     const r = await fetch(url, {
@@ -1000,7 +1008,7 @@ async function buscarPlanilhas() {
   res.resultados.forEach((r, idx) => {
     html += `
       <tr style="border-bottom:1px solid var(--border);">
-        <td style="padding:10px;">${r.pis}</td>
+        <td style="padding:10px;">${formatPIS(r.pis)}</td>
         <td style="padding:10px; font-weight:500;">${r.nome_atual}</td>
         <td style="padding:10px; font-size:11px; color:var(--text2);">${r.competencias.join(', ')}</td>
         <td style="padding:10px;">
@@ -1094,7 +1102,7 @@ async function carregarStatusConciliacao() {
       <p style="color:var(--text2); margin-bottom:15px;">Abaixo estão os funcionários que possuem o mesmo PIS, mas nomes diferentes nas planilhas. Clique no nome correto para corrigir em todas as planilhas carregadas.</p>
       ${r.conflitos.map(c => `
         <div style="background:var(--bg3); padding:15px; border-radius:8px; border:1px solid var(--border); margin-bottom:15px;">
-          <h4 style="margin:0 0 10px 0;">PIS: <span style="color:var(--blue);">${c.pis}</span></h4>
+          <h4 style="margin:0 0 10px 0;">PIS: <span style="color:var(--blue);">${formatPIS(c.pis)}</span></h4>
           <div style="display:flex; gap:10px; flex-wrap:wrap;">
             ${c.opcoes.map(op => `
               <button class="btn ${op.nome === c.sugerido ? 'btn-green' : 'btn-blue'}" 
@@ -1247,7 +1255,7 @@ window.showAuditTab = function(comp) {
         <tbody>
           ${data.erros_nominais.map(e => `
             <tr>
-              <td>${e.pis}</td>
+              <td>${formatPIS(e.pis)}</td>
               <td style="color:var(--red);">${e.nome_planilha}</td>
               <td style="color:var(--blue); font-weight:bold;">${e.nome_pdf}</td>
               <td style="width:200px; position:relative;">
@@ -1274,7 +1282,7 @@ window.showAuditTab = function(comp) {
         <tbody>
           ${data.encontrados.map(e => `
             <tr>
-              <td>${e.pis}</td>
+              <td>${formatPIS(e.pis)}</td>
               <td>${e.nome_planilha}</td>
               <td style="font-weight:bold;">${e.nome_pdf}</td>
               <td style="color:var(--green);">${e.detalhe}</td>
@@ -1299,7 +1307,7 @@ window.showAuditTab = function(comp) {
         <tbody>
           ${data.encontrados_abreviacao.map(e => `
             <tr>
-              <td>${e.pis}</td>
+              <td>${formatPIS(e.pis)}</td>
               <td>${e.nome_planilha}</td>
               <td style="font-weight:bold;">${e.nome_pdf}</td>
               <td style="color:var(--green);">${e.detalhe}</td>
@@ -1324,7 +1332,7 @@ window.showAuditTab = function(comp) {
         <tbody>
           ${data.nao_encontrados.map(e => `
             <tr>
-              <td>${e.pis}</td>
+              <td>${formatPIS(e.pis)}</td>
               <td style="font-weight:bold;">${e.nome_planilha}</td>
               <td style="color:var(--text2);">${e.proc}</td>
             </tr>
