@@ -813,6 +813,9 @@ def corrigir_xls_fisico():
     arquivos_alterados = 0
     linhas_alteradas = 0
     avisos = []
+    
+    import pythoncom
+    pythoncom.CoInitialize()
 
     # Helper functions
     def arquivo_em_uso(caminho):
@@ -865,10 +868,8 @@ def corrigir_xls_fisico():
                 avisos.append(f'"{p_data["nome_original"]}" está aberto no Excel — feche o arquivo e tente novamente.')
             elif indices:
                 import win32com.client
-                import pythoncom
+                xl = win32com.client.Dispatch('Excel.Application')
                 try:
-                    pythoncom.CoInitialize()
-                    xl = win32com.client.DispatchEx('Excel.Application')
                     xl.Application.DisplayAlerts = False
                     xl.Visible = False
                     abs_path = os.path.abspath(caminho_planilha)
@@ -884,13 +885,14 @@ def corrigir_xls_fisico():
                         
                     wb.Close(SaveChanges=True)
                 except Exception as e:
-                    print(f"Erro COM win32: {e}")
+                    import traceback
+                    print(f"Erro COM win32 ao editar {caminho_planilha}: {e}")
+                    traceback.print_exc()
                 finally:
                     try:
                         xl.Quit()
-                    except:
+                    except Exception:
                         pass
-                    pythoncom.CoUninitialize()
                     
         elif ext == '.ods':
             # Support for .ods using odfpy
@@ -983,6 +985,8 @@ def corrigir_xls_fisico():
             if novo_df is not None:
                 _state['planilhas'][comp]['df'] = novo_df
 
+    pythoncom.CoUninitialize()
+    
     return jsonify({
         'ok': True,
         'arquivos_alterados': arquivos_alterados,
