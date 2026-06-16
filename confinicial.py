@@ -184,12 +184,12 @@ def verificar_abreviacao(nome_planilha, nome_pdf):
 def e_um_nome_valido(texto):
     if not isinstance(texto, str): return False
     texto = texto.strip().upper()
-    ignorar = ["NOMES", "NOME", "TITULAR", "FUNCIONARIO", "PIS", "PROC.", "DATA", "OBS", "TOTAL", "TOTAIS", "SUBTOTAL"]
+    ignorar = ["NOMES", "NOME", "TITULAR", "FUNCIONARIO", "PIS", "PROC.", "DATA", "OBS", "TOTAL", "TOTAIS", "SUBTOTAL", "TOTAL - GERAL", "TOTAL GERAL"]
     if texto in ignorar: return False
-    # Rejeita linhas de total tipo "T O T A I S" ou "TOTAIS"
-    if re.match(r'^[A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇ][\.\s]+[A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇ]', texto):
-        palavra_limpa = texto.replace(' ', '').replace('.', '')
-        if palavra_limpa in ['TOTAIS', 'TOTAL', 'SUBTOTAL']:
+    # Rejeita linhas de total tipo "T O T A I S" ou "TOTAL - GERAL"
+    if re.match(r'^[A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇ][\.\s\-]+[A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇ]', texto):
+        palavra_limpa = texto.replace(' ', '').replace('.', '').replace('-', '')
+        if palavra_limpa in ['TOTAIS', 'TOTAL', 'SUBTOTAL', 'TOTALGERAL']:
             return False
     if re.match(r"^[A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇ0-9 \.\-]+$", texto) and " " in texto and len(texto) > 5:
         return True
