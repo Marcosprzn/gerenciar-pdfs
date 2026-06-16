@@ -14,7 +14,6 @@ import xlrd
 from odf import opendocument
 from odf.table import Table, TableRow, TableCell
 from odf.text import P
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import llm_matcher
 import confinicial
 import pandas as pd
