@@ -288,6 +288,9 @@
     <button class="tab-btn" onclick="showTab('editar-planilhas')">
       📝 Editar Planilhas
     </button>
+    <button class="tab-btn" onclick="showTab('corrigir-pis')">
+      ✏️ Corrigir PIS
+    </button>
     <button class="tab-btn" onclick="showTab('historico')">
       🕒 Histórico
     </button>
@@ -471,6 +474,24 @@
     </div>
 
     <div id="planilhas-search-results"></div>
+  </div>
+
+  <!-- ═══ Tab: Corrigir PIS ═════════════════════════════════ -->
+  <div id="tab-corrigir-pis" class="tab-panel">
+    <div class="card-title" style="font-size:20px; margin-bottom:20px;">
+      ✏️ Corrigir PIS (Em Lote)
+    </div>
+
+    <div class="card">
+      <p class="text-sm" style="margin-bottom:14px;">Digite o Nome ou PIS atual para localizar funcionários nas <b>planilhas carregadas</b> (aba Conciliação). Alterações feitas aqui atualizarão o PIS nos arquivos físicos.</p>
+      <div class="search-wrap">
+        <input type="search" id="search-corrigir-pis-input" placeholder="Ex: 12345678901 ou JOSE DA SILVA..." autocomplete="off"
+               onkeydown="if(event.key==='Enter') buscarPlanilhasPIS()" />
+        <button class="btn btn-primary" onclick="buscarPlanilhasPIS()">🔍 Buscar nas Planilhas</button>
+      </div>
+    </div>
+
+    <div id="corrigir-pis-search-results"></div>
   </div>
 
   <!-- ═══ Tab 4: Histórico ════════════════════════════════════ -->
@@ -1041,6 +1062,80 @@ async function renomearPlanilhaLote(pis, inputId) {
     }
     // Refresh search results to show updated name
     buscarPlanilhas();
+  } else {
+    toast('Erro: ' + res.erro, 'error');
+  }
+}
+
+// ==========================================
+// ABA: CORRIGIR PIS
+// ==========================================
+async function buscarPlanilhasPIS() {
+  const termo = document.getElementById('search-corrigir-pis-input').value.trim();
+  if (termo.length < 3) return toast('Digite pelo menos 3 caracteres', 'warning');
+  
+  showLoading('Buscando nas planilhas...');
+  const res = await post('/api/buscar-planilhas', { termo });
+  hideLoading();
+  
+  if (!res.ok) return toast(res.erro, 'error');
+  
+  const container = document.getElementById('corrigir-pis-search-results');
+  if (res.resultados.length === 0) {
+    container.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text2);">Nenhum funcionário encontrado nas planilhas.</div>`;
+    return;
+  }
+  
+  let html = `<div style="margin-bottom:15px; color:var(--text2); font-size:13px;">${res.resultados.length} resultados encontrados:</div>`;
+  
+  html += `<table style="width:100%; border-collapse:collapse; background:var(--bg2); border-radius:8px; overflow:hidden;">
+    <thead style="background:var(--bg3);">
+      <tr>
+        <th style="padding:10px; text-align:left; border-bottom:1px solid var(--border);">PIS Atual</th>
+        <th style="padding:10px; text-align:left; border-bottom:1px solid var(--border);">Nome na Planilha</th>
+        <th style="padding:10px; text-align:left; border-bottom:1px solid var(--border);">Aparece em</th>
+        <th style="padding:10px; text-align:left; border-bottom:1px solid var(--border); width:350px;">Ação Lote (Físico)</th>
+      </tr>
+    </thead>
+    <tbody>`;
+    
+  res.resultados.forEach((r, idx) => {
+    html += `
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:10px;">${formatPIS(r.pis)}</td>
+        <td style="padding:10px; font-weight:500;">${r.nome_atual}</td>
+        <td style="padding:10px; font-size:11px; color:var(--text2);">${r.competencias.join(', ')}</td>
+        <td style="padding:10px;">
+          <div style="display:flex; gap:8px;">
+            <input type="text" id="novo-pis-planilha-${idx}" value="${r.pis}" placeholder="Novo PIS..." style="flex:1; padding:6px 10px; font-size:12px; border-radius:4px;" />
+            <button class="btn btn-red btn-sm" onclick="corrigirPISLote('${escape(r.nome_atual)}', '${r.pis}', 'novo-pis-planilha-${idx}')">🔄 Atualizar Lote</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  });
+  
+  html += `</tbody></table>`;
+  container.innerHTML = html;
+}
+
+async function corrigirPISLote(nomeEsc, pisAntigo, inputId) {
+  const nome = unescape(nomeEsc);
+  const novoPis = document.getElementById(inputId).value.replace(/\D/g, '').trim();
+  if (!novoPis || novoPis.length !== 11) return toast('Digite um PIS válido com 11 dígitos!', 'error');
+  
+  showLoading('Aplicando alteração de PIS no arquivo físico...');
+  const res = await post('/api/corrigir-pis-fisico', { nome: nome, pis_antigo: pisAntigo, novo_pis: novoPis });
+  hideLoading();
+  
+  if (res.ok) {
+    if (res.avisos && res.avisos.length > 0) {
+      toast(res.avisos.join(' | '), 'warning');
+    } else {
+      toast(`Lote: ${res.arquivos_alterados} planilhas e ${res.linhas_alteradas} linhas alteradas fisicamente!`, 'success');
+    }
+    // Refresh search results
+    buscarPlanilhasPIS();
   } else {
     toast('Erro: ' + res.erro, 'error');
   }

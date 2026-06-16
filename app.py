@@ -994,6 +994,204 @@ def corrigir_xls_fisico():
         'avisos': avisos
     })
 
+@app.route('/api/corrigir-pis-fisico', methods=['POST'])
+def corrigir_pis_fisico():
+    data = request.json
+    nome_alvo = str(data.get('nome', '')).strip().upper()
+    pis_antigo = normalizar_pis(data.get('pis_antigo'))
+    novo_pis = normalizar_pis(data.get('novo_pis'))
+    
+    if not nome_alvo or not novo_pis:
+        return jsonify({'ok': False, 'erro': 'Nome ou Novo PIS faltando.'})
+        
+    arquivos_alterados = 0
+    linhas_alteradas = 0
+    avisos = []
+    
+    import pythoncom
+    pythoncom.CoInitialize()
+
+    # Helper functions
+    def arquivo_em_uso(caminho):
+        """Verifica se o arquivo está aberto/bloqueado (ex: no Excel) antes de tentar editar via COM."""
+        try:
+            with open(caminho, 'r+b'):
+                pass
+            return False
+        except (PermissionError, OSError):
+            return True
+
+    def get_correcoes_xls(caminho):
+        indices_e_colunas = []
+        try:
+            wb = xlrd.open_workbook(caminho)
+            try:
+                sheet = wb.sheet_by_name('FGTS EM ATRASO - PROCESSOS')
+            except:
+                sheet = wb.sheet_by_index(0)
+            for row in range(sheet.nrows):
+                try:
+                    val_nome = str(sheet.cell_value(row, 3)).strip().upper()
+                except:
+                    val_nome = ""
+                if val_nome == nome_alvo:
+                    val_pis_c = normalizar_pis(sheet.cell_value(row, 2))
+                    val_pis_b = normalizar_pis(sheet.cell_value(row, 1))
+                    if val_pis_c == pis_antigo and val_pis_c != novo_pis:
+                        indices_e_colunas.append((row, 3)) # coluna C (1-indexed em win32com é 3)
+                    elif val_pis_b == pis_antigo and val_pis_b != novo_pis:
+                        indices_e_colunas.append((row, 2)) # coluna B
+                    elif not pis_antigo and val_pis_c != novo_pis:
+                        indices_e_colunas.append((row, 3))
+        except Exception as e:
+            print(f"Erro xlrd em PIS: {e}")
+        return indices_e_colunas
+
+    # Varre TODAS as planilhas carregadas
+    for comp, p_data in _state['planilhas'].items():
+        caminho_planilha = p_data['caminho']
+        if not os.path.exists(caminho_planilha):
+            continue
+            
+        ext = os.path.splitext(caminho_planilha)[1].lower()
+        alterados_nesta = 0
+        
+        if ext == '.xls':
+            itens = get_correcoes_xls(caminho_planilha)
+            if itens and arquivo_em_uso(caminho_planilha):
+                avisos.append(f'"{p_data["nome_original"]}" está aberto no Excel — feche o arquivo e tente novamente.')
+            elif itens:
+                import win32com.client
+                xl = win32com.client.Dispatch('Excel.Application')
+                try:
+                    xl.Application.DisplayAlerts = False
+                    xl.Visible = False
+                    abs_path = os.path.abspath(caminho_planilha)
+                    wb = xl.Workbooks.Open(abs_path)
+                    try:
+                        ws = wb.Sheets('FGTS EM ATRASO - PROCESSOS')
+                    except:
+                        ws = wb.Sheets(1)
+                        
+                    for r, col in itens:
+                        ws.Cells(r + 1, col).Value = novo_pis
+                        alterados_nesta += 1
+                        
+                    wb.Close(SaveChanges=True)
+                except Exception as e:
+                    import traceback
+                    print(f"Erro COM win32 ao editar PIS {caminho_planilha}: {e}")
+                    traceback.print_exc()
+                finally:
+                    try:
+                        xl.Quit()
+                    except Exception:
+                        pass
+                    
+        elif ext == '.ods':
+            # Support for .ods using odfpy
+            def _ods_set_cell_value(rows, row_idx, col_idx, value):
+                if row_idx >= len(rows): return
+                cells = rows[row_idx].getElementsByType(TableCell)
+                while len(cells) <= col_idx:
+                    new_cell = TableCell()
+                    rows[row_idx].addElement(new_cell)
+                    cells = rows[row_idx].getElementsByType(TableCell)
+                cell = cells[col_idx]
+                for old_p in cell.getElementsByType(P):
+                    cell.removeChild(old_p)
+                cell.setAttribute('valuetype', 'string')
+                p = P(text=value)
+                cell.addElement(p)
+                
+            try:
+                df_ods = pd.read_excel(caminho_planilha, sheet_name=None, header=None, engine='odf')
+                aba_nome = 'FGTS EM ATRASO - PROCESSOS' if 'FGTS EM ATRASO - PROCESSOS' in df_ods else list(df_ods.keys())[0]
+                aba = df_ods[aba_nome]
+                indices_ods = []
+                for i in range(len(aba)):
+                    try:
+                        val_nome = str(aba.iloc[i, 3]).strip().upper()
+                    except:
+                        val_nome = ""
+                    if val_nome == nome_alvo:
+                        val_pis_c = normalizar_pis(aba.iloc[i, 2])
+                        val_pis_b = normalizar_pis(aba.iloc[i, 1])
+                        if val_pis_c == pis_antigo and val_pis_c != novo_pis:
+                            indices_ods.append((i, 2))
+                        elif val_pis_b == pis_antigo and val_pis_b != novo_pis:
+                            indices_ods.append((i, 1))
+                        elif not pis_antigo and val_pis_c != novo_pis:
+                            indices_ods.append((i, 2))
+                            
+                if indices_ods:
+                    doc = opendocument.load(caminho_planilha)
+                    tables = doc.spreadsheet.getElementsByType(Table)
+                    table = None
+                    for t in tables:
+                        if t.getAttribute('name') == 'FGTS EM ATRASO - PROCESSOS':
+                            table = t
+                            break
+                    if table is None and tables:
+                        table = tables[0]
+                        
+                    if table:
+                        rows = table.getElementsByType(TableRow)
+                        for idx, col_idx in indices_ods:
+                            _ods_set_cell_value(rows, idx, col_idx, novo_pis)
+                            alterados_nesta += 1
+                        doc.save(caminho_planilha)
+            except Exception as e:
+                print(f"Erro ao salvar ods físico: {e}")
+                
+        else:
+            try:
+                wb = load_workbook(caminho_planilha)
+                try:
+                    ws = wb['FGTS EM ATRASO - PROCESSOS']
+                except:
+                    ws = wb.active
+                    
+                for row in range(1, ws.max_row + 1):
+                    try:
+                        val_nome = str(ws.cell(row=row, column=4).value).strip().upper()
+                    except:
+                        val_nome = ""
+                    if val_nome == nome_alvo:
+                        val_pis_c = normalizar_pis(ws.cell(row=row, column=3).value)
+                        val_pis_b = normalizar_pis(ws.cell(row=row, column=2).value)
+                        
+                        if val_pis_c == pis_antigo and val_pis_c != novo_pis:
+                            ws.cell(row=row, column=3).value = novo_pis
+                            alterados_nesta += 1
+                        elif val_pis_b == pis_antigo and val_pis_b != novo_pis:
+                            ws.cell(row=row, column=2).value = novo_pis
+                            alterados_nesta += 1
+                        elif not pis_antigo and val_pis_c != novo_pis:
+                            ws.cell(row=row, column=3).value = novo_pis
+                            alterados_nesta += 1
+                            
+                if alterados_nesta > 0:
+                    wb.save(caminho_planilha)
+            except Exception as e:
+                print(f"Erro openpyxl: {e}")
+                
+        if alterados_nesta > 0:
+            arquivos_alterados += 1
+            linhas_alteradas += alterados_nesta
+            novo_df = confinicial.ler_planilha_fgts(caminho_planilha)
+            if novo_df is not None:
+                _state['planilhas'][comp]['df'] = novo_df
+
+    pythoncom.CoUninitialize()
+    
+    return jsonify({
+        'ok': True,
+        'arquivos_alterados': arquivos_alterados,
+        'linhas_alteradas': linhas_alteradas,
+        'avisos': avisos
+    })
+
 @app.route('/api/renomear-pdf-conciliacao', methods=['POST'])
 def renomear_pdf_conciliacao():
     data = request.json
