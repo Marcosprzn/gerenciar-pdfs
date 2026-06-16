@@ -771,12 +771,31 @@ def buscar_planilhas():
     
     resultados_dict = {}
     
+    # Palavras a ignorar (linhas de totais, cabeçalhos etc.)
+    IGNORAR_NOMES = {
+        'NOMES', 'NOME', 'TITULAR', 'FUNCIONARIO', 'PIS', 'PROC', 'DATA', 'OBS',
+        'TOTAL', 'TOTAIS', 'SUBTOTAL', 'TOTAL GERAL', 'TOTALGERAL', 'GERAL',
+        'TOTAL- GERAL', 'TOTAL-GERAL',
+    }
+    
     for comp, p_data in _state['planilhas'].items():
         df = p_data['df']
         for idx, row in df.iterrows():
             pis = normalizar_pis(row.get('PIS', ''))
             nome_raw = str(row.get('NOMES', ''))
             nome_norm = normalizar(nome_raw)
+            
+            # Ignora linhas de totais, cabeçalhos e nomes inválidos
+            if not nome_norm or len(nome_norm) <= 4:
+                continue
+            if nome_norm in IGNORAR_NOMES:
+                continue
+            # Ignora se não tiver espaço (não é nome completo)
+            if ' ' not in nome_norm:
+                continue
+            # Ignora se contiver palavras de total
+            if any(p in nome_norm for p in ['TOTAL', 'GERAL', 'SUBTOTAL']):
+                continue
             
             match = False
             if termo_pis and pis == termo_pis:
