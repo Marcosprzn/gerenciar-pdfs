@@ -1031,10 +1031,10 @@ def corrigir_pis_fisico():
                 sheet = wb.sheet_by_index(0)
             for row in range(sheet.nrows):
                 try:
-                    val_nome = str(sheet.cell_value(row, 3)).strip().upper()
+                    val_nome = str(sheet.cell_value(row, 3))
                 except:
                     val_nome = ""
-                if val_nome == nome_alvo:
+                if normalizar(val_nome) == normalizar(nome_alvo):
                     val_pis_c = normalizar_pis(sheet.cell_value(row, 2))
                     val_pis_b = normalizar_pis(sheet.cell_value(row, 1))
                     if val_pis_c == pis_antigo and val_pis_c != novo_pis:
@@ -1111,10 +1111,10 @@ def corrigir_pis_fisico():
                 indices_ods = []
                 for i in range(len(aba)):
                     try:
-                        val_nome = str(aba.iloc[i, 3]).strip().upper()
+                        val_nome = str(aba.iloc[i, 3])
                     except:
                         val_nome = ""
-                    if val_nome == nome_alvo:
+                    if normalizar(val_nome) == normalizar(nome_alvo):
                         val_pis_c = normalizar_pis(aba.iloc[i, 2])
                         val_pis_b = normalizar_pis(aba.iloc[i, 1])
                         if val_pis_c == pis_antigo and val_pis_c != novo_pis:
@@ -1154,10 +1154,10 @@ def corrigir_pis_fisico():
                     
                 for row in range(1, ws.max_row + 1):
                     try:
-                        val_nome = str(ws.cell(row=row, column=4).value).strip().upper()
+                        val_nome = str(ws.cell(row=row, column=4).value)
                     except:
                         val_nome = ""
-                    if val_nome == nome_alvo:
+                    if normalizar(val_nome) == normalizar(nome_alvo):
                         val_pis_c = normalizar_pis(ws.cell(row=row, column=3).value)
                         val_pis_b = normalizar_pis(ws.cell(row=row, column=2).value)
                         
