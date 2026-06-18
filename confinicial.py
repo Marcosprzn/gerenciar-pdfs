@@ -104,7 +104,7 @@ def normalizar_texto(texto):
     nfkd = unicodedata.normalize('NFKD', texto)
     texto_sem_acento = "".join([c for c in nfkd if not unicodedata.combining(c)])
     texto_upper = texto_sem_acento.upper()
-    texto_sem_ponto = texto_upper.replace('.', '')
+    texto_sem_ponto = texto_upper.replace('.', '').replace('(', '').replace(')', '')
     texto_sem_hifen = texto_sem_ponto.replace('-', ' ').replace('_', ' ')
     texto_limpo = " ".join(texto_sem_hifen.split())
     return texto_limpo
@@ -372,6 +372,22 @@ def verificar_pdfs(df, pasta_pdfs):
                     if not tokens_file: continue
                     p1, p2 = tokens_nome[0], tokens_file[0]
                     if p1 != p2 and not ((len(p1) <= 4 and p2.startswith(p1)) or (len(p2) <= 4 and p1.startswith(p2))):
+                        continue
+                    # Lista menor deve ser subconjunto da maior
+                    if len(tokens_nome) <= len(tokens_file):
+                        menor, maior = tokens_nome, tokens_file
+                    else:
+                        menor, maior = tokens_file, tokens_nome
+                    todos_casam = True
+                    for tm in menor:
+                        casa = any(
+                            tm == tm2 or (len(tm) <= 4 and tm2.startswith(tm)) or (len(tm2) <= 4 and tm.startswith(tm2))
+                            for tm2 in maior
+                        )
+                        if not casa:
+                            todos_casam = False
+                            break
+                    if not todos_casam:
                         continue
                     ratio = calcular_similaridade(nome_norm, arq["norm"])
                     if ratio >= 0.85 and ratio > melhor_ratio:

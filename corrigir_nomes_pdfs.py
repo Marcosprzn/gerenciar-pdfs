@@ -34,7 +34,7 @@ def normalizar_texto(texto):
     nfkd = unicodedata.normalize('NFKD', texto)
     texto_sem_acento = "".join([c for c in nfkd if not unicodedata.combining(c)])
     texto_upper = texto_sem_acento.upper()
-    texto_sem_ponto = texto_upper.replace('.', '')
+    texto_sem_ponto = texto_upper.replace('.', '').replace('(', '').replace(')', '')
     texto_sem_hifen = texto_sem_ponto.replace('-', ' ').replace('_', ' ')
     return " ".join(texto_sem_hifen.split())
 

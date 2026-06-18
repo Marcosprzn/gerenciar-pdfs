@@ -39,7 +39,7 @@ def normalizar(texto):
     if not isinstance(texto, str): return ""
     nfkd = unicodedata.normalize('NFKD', texto)
     s = "".join(c for c in nfkd if not unicodedata.combining(c)).upper()
-    s = s.replace('.', '').replace('-', ' ').replace('_', ' ')
+    s = s.replace('.', '').replace('-', ' ').replace('_', ' ').replace('(', '').replace(')', '')
     return " ".join(s.split())
 
 def levenshtein(a, b):
@@ -200,6 +200,22 @@ def buscar_melhor_match(nome_busca, pdfs_disponiveis, usar_llm=False, nivel_rigo
                     # Primeiro nome deve ser igual ou abreviacao
                     p1, p2 = tokens_nome[0], tokens_file[0]
                     if p1 != p2 and not ((len(p1) <= 4 and p2.startswith(p1)) or (len(p2) <= 4 and p1.startswith(p2))):
+                        continue
+                    # Lista menor deve ser subconjunto da maior (todos os tokens devem casar)
+                    if len(tokens_nome) <= len(tokens_file):
+                        menor, maior = tokens_nome, tokens_file
+                    else:
+                        menor, maior = tokens_file, tokens_nome
+                    todos_casam = True
+                    for tm in menor:
+                        casa = any(
+                            tm == tm2 or (len(tm) <= 4 and tm2.startswith(tm)) or (len(tm2) <= 4 and tm.startswith(tm2))
+                            for tm2 in maior
+                        )
+                        if not casa:
+                            todos_casam = False
+                            break
+                    if not todos_casam:
                         continue
                     r = similaridade(nome_norm, n)
                     if r >= 0.85 and r > melhor_razao:
