@@ -209,7 +209,10 @@ def buscar_melhor_match(nome_busca, pdfs_disponiveis, usar_llm=False, nivel_rigo
                     todos_casam = True
                     for tm in menor:
                         casa = any(
-                            tm == tm2 or (len(tm) <= 4 and tm2.startswith(tm)) or (len(tm2) <= 4 and tm.startswith(tm2))
+                            tm == tm2 or
+                            (len(tm) <= 4 and tm2.startswith(tm)) or
+                            (len(tm2) <= 4 and tm.startswith(tm2)) or
+                            (len(tm) >= 4 and len(tm2) >= 4 and levenshtein(tm, tm2) <= max(1, min(len(tm), len(tm2)) // 3))
                             for tm2 in maior
                         )
                         if not casa:
