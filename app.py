@@ -203,10 +203,31 @@ def encontrar_match_ref(nome_norm, nome_stem, nomes_ref, ignorar_acentos=False):
         r = similaridade(nome_norm, normalizar(melhor))
         return melhor, ('rename_auto' if r >= 0.82 else 'duvida'), round(r, 3)
 
-    # 3. Similaridade pura
+    # 3. Similaridade (exige primeiro nome igual + token overlap)
     melhor = None; best_r = 0
     for ref in nomes_ref:
-        r = similaridade(nome_norm, normalizar(ref))
+        rn = normalizar(ref)
+        tn = [t for t in nome_norm.split() if t not in CONECTORES]
+        tr = [t for t in rn.split() if t not in CONECTORES]
+        if not tn or not tr: continue
+        # Primeiro nome deve ser igual ou abreviacao
+        if tn[0] != tr[0] and not ((len(tn[0]) <= 4 and tr[0].startswith(tn[0])) or (len(tr[0]) <= 4 and tn[0].startswith(tr[0]))):
+            continue
+        # Lista menor deve ser subconjunto da maior (com levenshtein)
+        if len(tn) <= len(tr): menor, maior = tn, tr
+        else: menor, maior = tr, tn
+        todos_casam = True
+        for tm in menor:
+            casa = any(
+                tm == tm2 or
+                (len(tm) <= 4 and tm2.startswith(tm)) or
+                (len(tm2) <= 4 and tm.startswith(tm2)) or
+                (len(tm) >= 4 and len(tm2) >= 4 and levenshtein(tm, tm2) <= max(1, min(len(tm), len(tm2)) // 3))
+                for tm2 in maior
+            )
+            if not casa: todos_casam = False; break
+        if not todos_casam: continue
+        r = similaridade(nome_norm, rn)
         if r > best_r:
             best_r = r; melhor = ref
     if melhor and best_r >= 0.60:
