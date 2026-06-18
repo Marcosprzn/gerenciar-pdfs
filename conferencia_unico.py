@@ -272,6 +272,13 @@ def conferir(planilha_path, pasta_pdfs, usar_llm=False):
     excluidos = sorted(f for f in os.listdir(pasta_pdfs)
                        if not eh_arquivo_valido(f) and not f.lower().endswith(('.xls', '.xlsx', '.ods')))
 
+    # Debug: mostra distribuicao por extensao
+    ext_count = {}
+    for f in pdfs_brutos:
+        ext = os.path.splitext(f)[1].lower() or '(sem ext)'
+        ext_count[ext] = ext_count.get(ext, 0) + 1
+    print(f'  Arquivos por tipo: {", ".join(f"{k}: {v}" for k, v in sorted(ext_count.items()))}')
+
     arquivos = []
     for f in pdfs_brutos:
         stem, var = extrair_variante(os.path.splitext(f)[0])
@@ -311,6 +318,21 @@ def conferir(planilha_path, pasta_pdfs, usar_llm=False):
 
     for idx in range(len(df)):
         if not status_lista[idx]:
+            # Debug: mostra o melhor candidato possivel
+            nome_plan = df.iloc[idx]['NOMES']
+            n_norm = normalizar(nome_plan)
+            melhor_arq = None
+            melhor_r = 0
+            for a in arquivos:
+                r = similaridade(n_norm, a["norm"])
+                if r > melhor_r:
+                    melhor_r = r
+                    melhor_arq = a
+            if melhor_arq and melhor_r > 0:
+                print(f'    [DEBUG] NAO ENCONTRADO: {nome_plan}')
+                print(f'            Melhor candidato: {melhor_arq["real"]} (similaridade: {melhor_r:.0%})')
+                abrev = verificar_abreviacao(n_norm, melhor_arq["norm"])
+                print(f'            Abreviacao: {abrev}')
             status_lista[idx] = "NAO ENCONTRADO NO PDF"
             arquivo_lista[idx] = ""
 
@@ -760,7 +782,13 @@ def main():
                 print('  Pulando...')
                 continue
 
-        resultado = conferir(planilha, pasta_pdfs, usar_llm)
+        try:
+            resultado = conferir(planilha, pasta_pdfs, usar_llm)
+        except Exception as e:
+            import traceback
+            print(f'  ERRO NA CONFERENCIA: {e}')
+            traceback.print_exc()
+            resultado = None
         if resultado is None: continue
 
         df_result, resumo, erros_nominais, excluidos, total_pdfs = resultado
