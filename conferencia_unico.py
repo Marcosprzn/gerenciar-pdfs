@@ -278,7 +278,7 @@ def conferir(planilha_path, pasta_pdfs, usar_llm=False):
         arquivos.append({"real": f, "norm": normalizar(stem), "variante": var})
 
     print(f"  Pessoas na planilha: {len(df)}")
-    print(f"  PDFs validos: {len(arquivos)}")
+    print(f"  Arquivos na pasta: {len(pdfs_brutos)}")
     if excluidos:
         print(f"  PDFs ignorados (sistema): {len(excluidos)}")
     print()
@@ -563,7 +563,7 @@ def corrigir_nomes_em_massa(pasta_raiz, pasta_referencia):
     for pasta in pastas_alvo:
         print(f"    Inspecionando: {os.path.basename(pasta)}")
         for f in os.listdir(pasta):
-            if not f.lower().endswith(EXT): continue
+            if not eh_arquivo_valido(f): continue
         if any(p in f.upper() for p in EXCLUIR_PADROES): continue
 
         nome_original = os.path.splitext(f)[0]
