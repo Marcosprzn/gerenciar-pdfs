@@ -73,7 +73,7 @@ class PDFWatcher(FileSystemEventHandler):
         if event.is_directory: return
         p1 = getattr(event, 'src_path', '').lower()
         p2 = getattr(event, 'dest_path', '').lower()
-        if p1.endswith('.pdf') or p2.endswith('.pdf'):
+        if p1.endswith(('.pdf', '.tif', '.tiff')) or p2.endswith(('.pdf', '.tif', '.tiff')):
             _state['needs_update'] = True
 
 observer = None
@@ -397,7 +397,8 @@ def executar():
             resultados.append({'arquivo': arquivo, 'status': 'erro', 'msg': 'Arquivo não encontrado'})
             continue
         stem, var = extrair_variante(os.path.splitext(arquivo)[0])
-        novo_nome = nome_ref + (' ' + var if var else '') + '.pdf'
+        ext_original = os.path.splitext(arquivo)[1] or '.pdf'
+        novo_nome = nome_ref + (' ' + var if var else '') + ext_original
         destino = os.path.join(pasta_path, novo_nome)
         pasta_nome = os.path.basename(pasta_path)
         if arquivo == novo_nome:
@@ -1238,22 +1239,29 @@ def renomear_pdf_conciliacao():
         return jsonify({'ok': False, 'erro': f'Pasta de PDFs para a competência {comp} não encontrada.'})
         
     caminho_antigo = os.path.join(pasta_pdfs, nome_antigo + '.pdf')
-    caminho_novo = os.path.join(pasta_pdfs, nome_novo + '.pdf')
-    
-    # Se o nome antigo nao existir com .pdf, tenta procurar
+
+    # Se o nome antigo nao existir com .pdf, procura com .tif/.tiff
+    ext_real = '.pdf'
     if not os.path.exists(caminho_antigo):
-        encontrou = False
+        caminho_antigo = os.path.join(pasta_pdfs, nome_antigo + '.tif')
+        ext_real = '.tif'
+    if not os.path.exists(caminho_antigo):
+        caminho_antigo = os.path.join(pasta_pdfs, nome_antigo + '.tiff')
+        ext_real = '.tiff'
+    if not os.path.exists(caminho_antigo):
         for f in os.listdir(pasta_pdfs):
-            if f.lower().endswith('.pdf') and os.path.splitext(f)[0] == nome_antigo:
+            if os.path.splitext(f)[0] == nome_antigo:
                 caminho_antigo = os.path.join(pasta_pdfs, f)
-                encontrou = True
+                ext_real = os.path.splitext(f)[1]
                 break
-        if not encontrou:
+        else:
             return jsonify({'ok': False, 'erro': 'Arquivo PDF antigo não encontrado na pasta física.'})
-            
+
+    caminho_novo = os.path.join(pasta_pdfs, nome_novo + ext_real)
+
     if os.path.exists(caminho_novo):
         return jsonify({'ok': False, 'erro': 'Já existe um arquivo com este novo nome na pasta.'})
-        
+
     try:
         os.rename(caminho_antigo, caminho_novo)
         return jsonify({'ok': True})
@@ -1297,7 +1305,7 @@ def gerar_conciliacao():
             df_final = df
             total_pdfs = 0
         else:
-            total_pdfs = len([f for f in os.listdir(pasta_pdfs) if f.lower().endswith('.pdf')])
+            total_pdfs = len([f for f in os.listdir(pasta_pdfs) if f.lower().endswith(('.pdf', '.tif', '.tiff'))])
             # Executa a verificação principal
             df_final = confinicial.verificar_pdfs(df, pasta_pdfs)
             # Organiza os arquivos
