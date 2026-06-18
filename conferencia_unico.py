@@ -74,7 +74,8 @@ def eh_nome_valido(texto):
     return bool(re.match(r"^[A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇ0-9 \.\-]+$", t))
 
 def eh_arquivo_valido(nome_arquivo):
-    if not nome_arquivo.lower().endswith(EXT): return False
+    if nome_arquivo.lower().endswith(('.xls', '.xlsx', '.ods')):
+        return False
     n = os.path.splitext(nome_arquivo)[0].upper()
     return not any(p in n for p in EXCLUIR_PADROES)
 
@@ -269,7 +270,7 @@ def conferir(planilha_path, pasta_pdfs, usar_llm=False):
     # Lista PDFs
     pdfs_brutos = sorted(f for f in os.listdir(pasta_pdfs) if eh_arquivo_valido(f))
     excluidos = sorted(f for f in os.listdir(pasta_pdfs)
-                       if f.lower().endswith(('.pdf', '.tif', '.tiff')) and not eh_arquivo_valido(f))
+                       if not eh_arquivo_valido(f) and not f.lower().endswith(('.xls', '.xlsx', '.ods')))
 
     arquivos = []
     for f in pdfs_brutos:
@@ -541,7 +542,7 @@ def corrigir_nomes_em_massa(pasta_raiz, pasta_referencia):
     print(f"\n--- Iniciando Correcao em Massa ---")
     gabarito = {}
     for f in os.listdir(pasta_referencia):
-        if not f.lower().endswith('.pdf'): continue
+        if not f.lower().endswith(('.xls', '.xlsx', '.ods')) and not eh_arquivo_valido(f): continue
         stem, var = extrair_variante(os.path.splitext(f)[0])
         n = normalizar(stem)
         if n and n not in gabarito:
