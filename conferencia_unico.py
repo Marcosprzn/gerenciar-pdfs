@@ -137,7 +137,7 @@ def buscar_melhor_match(nome_busca, pdfs_disponiveis, usar_llm=False, nivel_rigo
                     melhor = (p, n)
         if melhor:
             razao = similaridade(nome_norm, melhor[1])
-            if razao < 0.90:
+            if razao < 0.80:
                 if usar_llm and llm_matcher:
                     resp = llm_matcher.verificar_com_llm(nome_norm, melhor[1])
                     if resp is True:
@@ -146,14 +146,14 @@ def buscar_melhor_match(nome_busca, pdfs_disponiveis, usar_llm=False, nivel_rigo
                     elif resp is False:
                         print(f'    [LLM] {nome_norm} x {melhor[1]} -> NAO')
                     else:
-                        print(f'    [LLM] {nome_norm} x {melhor[1]} -> DUVIDA (Erro nominal)')
+                        print(f'    [LLM] {nome_norm} x {melhor[1]} -> DUVIDA')
                         if nivel_rigor == 3:
                             return melhor[0], "POSSIVEL ERRO NOMINAL", None
-                    melhor = None
+                    if nivel_rigor == 1:
+                        melhor = None
                 else:
                     if nivel_rigor == 3:
                         return melhor[0], "POSSIVEL ERRO NOMINAL", None
-                    melhor = None
             if melhor:
                 return melhor[0], "ENCONTRADO COM ABREVIACAO", None
 
@@ -169,7 +169,7 @@ def buscar_melhor_match(nome_busca, pdfs_disponiveis, usar_llm=False, nivel_rigo
             if r > melhor_razao:
                 melhor_razao = r
                 melhor = (p, n)
-        if melhor and melhor_razao >= 0.90:
+        if melhor and melhor_razao >= 0.80:
             if usar_llm and llm_matcher:
                 resp = llm_matcher.verificar_com_llm(nome_norm, melhor[1])
                 if resp is True:
@@ -178,7 +178,7 @@ def buscar_melhor_match(nome_busca, pdfs_disponiveis, usar_llm=False, nivel_rigo
                 elif resp is False:
                     print(f'    [LLM] {nome_norm} x {melhor[1]} -> NAO')
                 else:
-                    print(f'    [LLM] {nome_norm} x {melhor[1]} -> DUVIDA (Erro nominal)')
+                    print(f'    [LLM] {nome_norm} x {melhor[1]} -> DUVIDA')
                     if nivel_rigor == 3:
                         return melhor[0], "POSSIVEL ERRO NOMINAL", None
             else:
