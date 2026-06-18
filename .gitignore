@@ -1,7 +1,6 @@
 __pycache__/
-*.py[cod]
-*$py.class
-.venv/
-env/
-venv/
-.env
+*.pyc
+.DS_Store
+*.xls
+*.xlsx
+*.ods
