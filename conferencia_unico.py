@@ -157,7 +157,7 @@ def buscar_melhor_match(nome_busca, pdfs_disponiveis, usar_llm=False, nivel_rigo
             if melhor:
                 return melhor[0], "ENCONTRADO COM ABREVIACAO", None
 
-        # 3. Similaridade (melhor candidato passa pela abreviacao)
+        # 3. Similaridade (primeiro com abreviacao, depois fallback direto)
         melhor = None
         melhor_razao = 0
         for p in grupo:
@@ -184,6 +184,41 @@ def buscar_melhor_match(nome_busca, pdfs_disponiveis, usar_llm=False, nivel_rigo
             else:
                 if nivel_rigor == 3:
                     return melhor[0], "POSSIVEL ERRO NOMINAL", None
+
+        # 3b. Similaridade direta (fallback sem abreviacao, com primeiro nome igual)
+        if not melhor:
+            melhor = None
+            melhor_razao = 0
+            tokens_nome = [t for t in nome_norm.split() if t not in CONECTORES]
+            if tokens_nome:
+                for p in grupo:
+                    s, _ = extrair_variante(os.path.splitext(p["real"])[0])
+                    n = normalizar(s)
+                    tokens_file = [t for t in n.split() if t not in CONECTORES]
+                    if not tokens_file:
+                        continue
+                    # Primeiro nome deve ser igual ou abreviacao
+                    p1, p2 = tokens_nome[0], tokens_file[0]
+                    if p1 != p2 and not ((len(p1) <= 4 and p2.startswith(p1)) or (len(p2) <= 4 and p1.startswith(p2))):
+                        continue
+                    r = similaridade(nome_norm, n)
+                    if r >= 0.85 and r > melhor_razao:
+                        melhor_razao = r
+                        melhor = (p, n)
+            if melhor:
+                if usar_llm and llm_matcher:
+                    resp = llm_matcher.verificar_com_llm(nome_norm, melhor[1])
+                    if resp is True:
+                        print(f'    [LLM] {nome_norm} x {melhor[1]} -> SIM')
+                        return melhor[0], "ENCONTRADO VIA LLM", None
+                    elif resp is False:
+                        print(f'    [LLM] {nome_norm} x {melhor[1]} -> NAO')
+                    else:
+                        if nivel_rigor == 3:
+                            return melhor[0], "POSSIVEL ERRO NOMINAL", None
+                else:
+                    if nivel_rigor == 3:
+                        return melhor[0], "POSSIVEL ERRO NOMINAL", None
 
         if nivel_rigor == 2:
             return None, None, None
