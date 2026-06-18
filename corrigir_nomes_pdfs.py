@@ -8,6 +8,7 @@ script fica cada vez mais preciso (autocorrecao progressiva).
 import os, re, shutil, unicodedata, datetime, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+EXT = ('.pdf', '.tif', '.tiff')
 EXCLUIR_PADROES = [
     'ARQUIVO SEFIP', 'SEFIP', 'GRRF', 'DEPOSITADO',
     'COMPROVANTE', 'RECIBO', 'EXTRATO', 'FOLHA',
@@ -38,7 +39,7 @@ def normalizar_texto(texto):
     return " ".join(texto_sem_hifen.split())
 
 def eh_pdf_valido(nome_arquivo):
-    if not nome_arquivo.lower().endswith('.pdf'):
+    if not nome_arquivo.lower().endswith(EXT):
         return False
     nome_sem_ext = os.path.splitext(nome_arquivo)[0].upper()
     return not any(p in nome_sem_ext for p in EXCLUIR_PADROES)

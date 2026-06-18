@@ -15,6 +15,7 @@ try:
 except ImportError:
     llm_matcher = None
 
+EXT = ('.pdf', '.tif', '.tiff')
 SHEET_NAME = 'FGTS EM ATRASO - PROCESSOS'
 EXCLUIR_PADROES = [
     'ARQUIVO SEFIP', 'SEFIP', 'GRRF', 'DEPOSITADO',
@@ -73,7 +74,7 @@ def eh_nome_valido(texto):
     return bool(re.match(r"^[A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇ0-9 \.\-]+$", t))
 
 def eh_arquivo_valido(nome_arquivo):
-    if not nome_arquivo.lower().endswith(('.pdf', '.tif', '.tiff')): return False
+    if not nome_arquivo.lower().endswith(EXT): return False
     n = os.path.splitext(nome_arquivo)[0].upper()
     return not any(p in n for p in EXCLUIR_PADROES)
 
@@ -561,75 +562,76 @@ def corrigir_nomes_em_massa(pasta_raiz, pasta_referencia):
     for pasta in pastas_alvo:
         print(f"    Inspecionando: {os.path.basename(pasta)}")
         for f in os.listdir(pasta):
-            if not f.lower().endswith('.pdf'): continue
-            if any(p in f.upper() for p in EXCLUIR_PADROES): continue
+            if not f.lower().endswith(EXT): continue
+        if any(p in f.upper() for p in EXCLUIR_PADROES): continue
+
+        nome_original = os.path.splitext(f)[0]
+        ext_original = os.path.splitext(f)[1]
+        
+        # Ignora arquivos que terminam com numero (ex: homonimos como "MANOEL TEIXEIRA 2")
+        if re.search(r'\d$', nome_original.strip()):
+            continue
             
-            nome_original = os.path.splitext(f)[0]
+        stem, var = extrair_variante(nome_original)
+        n_atual = normalizar(stem)
+        
+        if not n_atual: continue
+        
+        if n_atual in gabarito:
+            continue
             
-            # Ignora arquivos que terminam com numero (ex: homonimos como "MANOEL TEIXEIRA 2")
-            if re.search(r'\d$', nome_original.strip()):
+        if n_atual in cache_correcoes:
+            novo_nome_base = cache_correcoes[n_atual]
+            if novo_nome_base is None:
                 continue
-                
-            stem, var = extrair_variante(nome_original)
-            n_atual = normalizar(stem)
+            novo_nome = novo_nome_base + (f" {var}" if var else "") + ext_original
+            if novo_nome != f:
+                try:
+                    target = os.path.join(pasta, novo_nome)
+                    if not os.path.exists(target):
+                        os.rename(os.path.join(pasta, f), target)
+                except Exception as e:
+                    print(f"      [Erro ao renomear {f}]: {e}")
+            continue
             
-            if not n_atual: continue
-            
-            if n_atual in gabarito:
-                continue
-                
-            if n_atual in cache_correcoes:
-                novo_nome_base = cache_correcoes[n_atual]
-                if novo_nome_base is None:
-                    continue
-                novo_nome = novo_nome_base + (f" {var}" if var else "")
-                if novo_nome != nome_original:
-                    try:
-                        target = os.path.join(pasta, novo_nome + '.pdf')
-                        if not os.path.exists(target):
-                            os.rename(os.path.join(pasta, f), target)
-                    except Exception as e:
-                        print(f"      [Erro ao renomear {f}]: {e}")
-                continue
-                
-            melhor = None
-            melhor_r = 0
+        melhor = None
+        melhor_r = 0
+        for g_norm, g_stem in gabarito.items():
+            if verificar_abreviacao(g_norm, n_atual):
+                r = similaridade(g_norm, n_atual)
+                if r > melhor_r:
+                    melhor_r = r; melhor = g_norm
+        
+        if not melhor:
             for g_norm, g_stem in gabarito.items():
-                if verificar_abreviacao(g_norm, n_atual):
-                    r = similaridade(g_norm, n_atual)
-                    if r > melhor_r:
-                        melhor_r = r; melhor = g_norm
+                r = similaridade(g_norm, n_atual)
+                if r > melhor_r:
+                    melhor_r = r; melhor = g_norm
+        
+        if melhor and melhor_r > 0.65:
+            nome_bonito_gabarito = gabarito[melhor]
+            nome_pasta_atual = os.path.basename(pasta)
+            nome_pasta_ref = os.path.basename(pasta_referencia)
+            print(f"\n      [DUVIDA] O arquivo '{nome_original}' (pasta: {nome_pasta_atual}) eh a mesma pessoa que '{nome_bonito_gabarito}' (pasta: {nome_pasta_ref})?")
+            while True:
+                resp = input(f"      (1 para SIM / 2 para NAO): ").strip()
+                if resp in ('1', '2'): break
             
-            if not melhor:
-                for g_norm, g_stem in gabarito.items():
-                    r = similaridade(g_norm, n_atual)
-                    if r > melhor_r:
-                        melhor_r = r; melhor = g_norm
-            
-            if melhor and melhor_r > 0.65:
-                nome_bonito_gabarito = gabarito[melhor]
-                nome_pasta_atual = os.path.basename(pasta)
-                nome_pasta_ref = os.path.basename(pasta_referencia)
-                print(f"\n      [DUVIDA] O arquivo '{nome_original}' (pasta: {nome_pasta_atual}) eh a mesma pessoa que '{nome_bonito_gabarito}' (pasta: {nome_pasta_ref})?")
-                while True:
-                    resp = input(f"      (1 para SIM / 2 para NAO): ").strip()
-                    if resp in ('1', '2'): break
-                
-                if resp == '1':
-                    cache_correcoes[n_atual] = nome_bonito_gabarito
-                    novo_nome = nome_bonito_gabarito + (f" {var}" if var else "")
-                    print(f"      -> Renomeando para '{novo_nome}' e salvo no cache.")
-                    try:
-                        target = os.path.join(pasta, novo_nome + '.pdf')
-                        if os.path.exists(target):
-                            print(f"      [Aviso] '{novo_nome}.pdf' ja existe. Ignorando.")
-                        else:
-                            os.rename(os.path.join(pasta, f), target)
-                    except Exception as e:
-                        print(f"      [Erro] {e}")
-                else:
-                    cache_correcoes[n_atual] = None
-                    print(f"      -> Ignorado e salvo no cache.")
+            if resp == '1':
+                cache_correcoes[n_atual] = nome_bonito_gabarito
+                novo_nome = nome_bonito_gabarito + (f" {var}" if var else "") + ext_original
+                print(f"      -> Renomeando para '{novo_nome}' e salvo no cache.")
+                try:
+                    target = os.path.join(pasta, novo_nome)
+                    if os.path.exists(target):
+                        print(f"      [Aviso] '{novo_nome}' ja existe. Ignorando.")
+                    else:
+                        os.rename(os.path.join(pasta, f), target)
+                except Exception as e:
+                    print(f"      [Erro] {e}")
+            else:
+                cache_correcoes[n_atual] = None
+                print(f"      -> Ignorado e salvo no cache.")
 
 
 # ============================================================

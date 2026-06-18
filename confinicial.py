@@ -15,6 +15,7 @@ try:
 except ImportError:
     llm_matcher = None
 
+EXT = ('.pdf', '.tif', '.tiff')
 USAR_LLM = False
 
 # --- FUNÇÕES DE EXTRAÇÃO DE COMPETÊNCIA ---
@@ -281,7 +282,7 @@ def verificar_pdfs(df, pasta_pdfs):
     arquivos_excluidos = []
     arquivos_brutos = []
     for f in os.listdir(pasta_pdfs):
-        if not f.lower().endswith('.pdf'):
+        if not f.lower().endswith(EXT):
             continue
         nome_sem_ext = os.path.splitext(f)[0].upper()
         if any(p in nome_sem_ext for p in EXCLUIR_PADROES):
@@ -482,6 +483,10 @@ def organizar_pdfs_por_resultado(df, pasta_pdfs, pasta_destino):
 
         # Reconstrói o caminho completo do PDF na pasta ORIGINAL
         caminho_pdf = os.path.join(pasta_pdfs, nome_arquivo + '.pdf')
+        if not os.path.exists(caminho_pdf):
+            caminho_pdf = os.path.join(pasta_pdfs, nome_arquivo + '.tif')
+        if not os.path.exists(caminho_pdf):
+            caminho_pdf = os.path.join(pasta_pdfs, nome_arquivo + '.tiff')
         if not os.path.exists(caminho_pdf):
             # Tenta com a extensao real da pasta
             for f in os.listdir(pasta_pdfs):
