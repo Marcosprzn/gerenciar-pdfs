@@ -124,7 +124,7 @@ def extrair_variante(nome):
     return nome, None
 
 def eh_pdf_valido(f):
-    if not f.lower().endswith('.pdf'): return False
+    if not f.lower().endswith(('.pdf', '.tif', '.tiff')): return False
     n = os.path.splitext(f)[0].upper()
     return not any(p in n for p in EXCLUIR_PADROES)
 
@@ -458,8 +458,9 @@ def renomear():
     novo_nome = data.get('novo_nome', '').strip()
     if not novo_nome:
         return jsonify({'ok': False, 'erro': 'Nome não informado'})
-    if not novo_nome.lower().endswith('.pdf'):
-        novo_nome += '.pdf'
+    nome_base, ext = os.path.splitext(arquivo)
+    if not novo_nome.lower().endswith(('.pdf', '.tif', '.tiff')):
+        novo_nome += ext if ext else '.pdf'
     origem = os.path.join(pasta_path, arquivo)
     destino = os.path.join(pasta_path, novo_nome)
     if not os.path.exists(origem):
