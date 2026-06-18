@@ -15,6 +15,7 @@ try:
 except ImportError:
     llm_matcher = None
 
+EXT = ('.pdf', '.tif', '.tiff')
 USAR_LLM = False
 
 # --- FUNÇÕES DE EXTRAÇÃO DE COMPETÊNCIA ---
@@ -281,7 +282,7 @@ def verificar_pdfs(df, pasta_pdfs):
     arquivos_excluidos = []
     arquivos_brutos = []
     for f in os.listdir(pasta_pdfs):
-        if not f.lower().endswith('.pdf'):
+        if not f.lower().endswith(EXT):
             continue
         nome_sem_ext = os.path.splitext(f)[0].upper()
         if any(p in nome_sem_ext for p in EXCLUIR_PADROES):
@@ -356,6 +357,36 @@ def verificar_pdfs(df, pasta_pdfs):
                     return "ENCONTRADO VIA LLM", melhor_arq
                 elif resp is False:
                     print(f'    [LLM] {nome_norm} x {melhor_arq["norm"]} -> NAO')
+                else:
+                    return "POSSÍVEL ERRO NOMINAL", melhor_arq
+            else:
+                return "POSSÍVEL ERRO NOMINAL", melhor_arq
+
+        # 3b. Similaridade direta (fallback sem abreviacao, com primeiro nome igual)
+        if not melhor_arq:
+            melhor_ratio = 0
+            tokens_nome = [t for t in nome_norm.split() if t not in ('DE','DA','DO','DOS','DAS')]
+            if tokens_nome:
+                for arq in grupo:
+                    tokens_file = [t for t in arq["norm"].split() if t not in ('DE','DA','DO','DOS','DAS')]
+                    if not tokens_file: continue
+                    p1, p2 = tokens_nome[0], tokens_file[0]
+                    if p1 != p2 and not ((len(p1) <= 4 and p2.startswith(p1)) or (len(p2) <= 4 and p1.startswith(p2))):
+                        continue
+                    ratio = calcular_similaridade(nome_norm, arq["norm"])
+                    if ratio >= 0.85 and ratio > melhor_ratio:
+                        melhor_ratio = ratio
+                        melhor_arq = arq
+            if melhor_arq:
+                if usar_llm and llm_matcher:
+                    resp = llm_matcher.verificar_com_llm(nome_norm, melhor_arq["norm"])
+                    if resp is True:
+                        print(f'    [LLM] {nome_norm} x {melhor_arq["norm"]} -> SIM')
+                        return "ENCONTRADO VIA LLM", melhor_arq
+                    elif resp is False:
+                        print(f'    [LLM] {nome_norm} x {melhor_arq["norm"]} -> NAO')
+                    else:
+                        return "POSSÍVEL ERRO NOMINAL", melhor_arq
                 else:
                     return "POSSÍVEL ERRO NOMINAL", melhor_arq
                 melhor_arq = None
@@ -482,6 +513,10 @@ def organizar_pdfs_por_resultado(df, pasta_pdfs, pasta_destino):
 
         # Reconstrói o caminho completo do PDF na pasta ORIGINAL
         caminho_pdf = os.path.join(pasta_pdfs, nome_arquivo + '.pdf')
+        if not os.path.exists(caminho_pdf):
+            caminho_pdf = os.path.join(pasta_pdfs, nome_arquivo + '.tif')
+        if not os.path.exists(caminho_pdf):
+            caminho_pdf = os.path.join(pasta_pdfs, nome_arquivo + '.tiff')
         if not os.path.exists(caminho_pdf):
             # Tenta com a extensao real da pasta
             for f in os.listdir(pasta_pdfs):
