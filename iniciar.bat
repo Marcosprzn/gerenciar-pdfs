@@ -6,6 +6,18 @@ echo ================================================
 echo.
 cd /d "%~dp0"
 
+:: Se rodado da pasta de fora, entra automaticamente na pasta oficial
+if exist "gerenciador_pdfs\app.py" (
+    cd gerenciador_pdfs
+)
+if exist "app.py" (
+    :: Tudo certo, já estamos ou entramos na pasta correta
+) else (
+    echo ERRO: Arquivo app.py nao encontrado. Certifique-se de estar na pasta correta.
+    pause
+    exit /b
+)
+
 python -c "import flask, watchdog, pandas, openpyxl" 2>nul
 if errorlevel 1 (
     echo Instalando dependencias necessarias pela primeira vez... aguarde.
