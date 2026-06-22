@@ -564,7 +564,7 @@ def organizar_pdfs_por_resultado(df, pasta_pdfs, pasta_destino):
             else:
                 continue
 
-        if status == 'ENCONTRADO COMO 115':
+        if 'ENCONTRADO COMO 115' in status:
             os.makedirs(caminho_115, exist_ok=True)
             shutil.copy2(caminho_pdf, os.path.join(caminho_115, os.path.basename(caminho_pdf)))
             count_115 += 1
