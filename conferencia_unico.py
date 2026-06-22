@@ -39,7 +39,7 @@ def normalizar(texto):
     if not isinstance(texto, str): return ""
     nfkd = unicodedata.normalize('NFKD', texto)
     s = "".join(c for c in nfkd if not unicodedata.combining(c)).upper()
-    s = s.replace('.', '').replace('-', ' ').replace('_', ' ').replace('(', '').replace(')', '')
+    s = s.replace('.', '').replace('-', ' ').replace('\u2013', ' ').replace('\u2014', ' ').replace('_', ' ').replace('(', '').replace(')', '')
     return " ".join(s.split())
 
 def levenshtein(a, b):
@@ -817,6 +817,11 @@ def main():
                             break
                     if chave in mapa_pastas: break
                 if chave in mapa_pastas: break
+
+    if mapa_pastas:
+        print(f'  Pastas encontradas: {", ".join(sorted(mapa_pastas.keys()))}')
+    else:
+        print('  Nenhuma pasta com data reconhecida.')
 
     for planilha in arquivos:
         nome = os.path.basename(planilha)
