@@ -267,8 +267,11 @@ def buscar_melhor_match(nome_busca, pdfs_disponiveis, usar_llm=False, nivel_rigo
 
         return None, None, None
 
-    # Separa por variante
-    if var:
+    # Separa por variante (prioridade: tipo_lista 115 > variante do nome)
+    if tipo_lista == "115":
+        grupo_pri = [p for p in pdfs_disponiveis if p["variante"] == "REC115"]
+        grupo_sec = [p for p in pdfs_disponiveis if p not in grupo_pri]
+    elif var:
         grupo_pri = [p for p in pdfs_disponiveis if p["variante"] == var]
         grupo_sec = [p for p in pdfs_disponiveis if p not in grupo_pri]
     else:
@@ -360,7 +363,7 @@ def conferir(planilha_path, pasta_pdfs, usar_llm=False):
             nome = row['NOMES']
             tipo = row.get('TIPO_LISTA', 'PADRAO')
 
-            match, status, var_diff = buscar_melhor_match(nome, arquivos, usar_llm, nivel_rigor=rigor)
+            match, status, var_diff = buscar_melhor_match(nome, arquivos, usar_llm, nivel_rigor=rigor, tipo_lista=tipo)
 
             if match:
                 arquivos.remove(match)
