@@ -10,9 +10,7 @@ cd /d "%~dp0"
 if exist "gerenciador_pdfs\app.py" (
     cd gerenciador_pdfs
 )
-if exist "app.py" (
-    :: Tudo certo, já estamos ou entramos na pasta correta
-) else (
+if not exist "app.py" (
     echo ERRO: Arquivo app.py nao encontrado. Certifique-se de estar na pasta correta.
     pause
     exit /b
