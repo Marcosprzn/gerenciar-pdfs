@@ -71,8 +71,10 @@ try:
     arquivos = []
     for f in sorted(os.listdir(pasta_pdfs)):
         if not f.lower().endswith(('.pdf', '.tif', '.tiff')): continue
-        if any(p in os.path.splitext(f)[0].upper() for p in confinicial.EXCLUIR_PADROES): continue
+        # EXCLUIR_PADROES definido dentro de verificar_pdfs
+        excluir = ['ARQUIVO SEFIP', 'SEFIP', 'GRRF', 'DEPOSITADO', 'COMPROVANTE', 'RECIBO', 'EXTRATO', 'FOLHA', 'RELATORIO', 'GUIA', 'GPS', 'GFIP', 'PROTOCOLO', 'COMPENSACAO', 'DECLARACAO']
         stem, var = confinicial.extrair_variante(os.path.splitext(f)[0])
+        if any(p in os.path.splitext(f)[0].upper() for p in excluir): continue
         arquivos.append({"real": f, "norm": confinicial.normalizar_texto(stem), "variante": var})
     
     log.append(f"Total arquivos validos: {len(arquivos)}")
