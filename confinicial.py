@@ -444,15 +444,6 @@ def verificar_pdfs(df, pasta_pdfs):
 
             nome_norm = normalizar_texto(nome_planilha)
 
-            # DEBUG para 115
-            if tipo_lista == "115":
-                print(f'  [DEBUG 115] Processando: {nome_planilha!r}')
-                print(f'  [DEBUG 115] Normalizado:  {nome_norm!r}')
-                pri_nomes = [a["real"] for a in _filtrar_por_variante(arquivos_disponiveis, "REC115")]
-                sec_nomes = [a["real"] for a in _filtrar_sem_variante(arquivos_disponiveis)]
-                print(f'  [DEBUG 115] REC115 disp: {len(pri_nomes)} arquivos')
-                print(f'  [DEBUG 115] Sem variante: {len(sec_nomes)} arquivos')
-
             # Define o grupo primario baseado no tipo da lista
             if tipo_lista == "115":
                 grupo_primario = _filtrar_por_variante(arquivos_disponiveis, "REC115")
@@ -461,18 +452,18 @@ def verificar_pdfs(df, pasta_pdfs):
                 grupo_primario = _filtrar_sem_variante(arquivos_disponiveis)
                 grupo_secundario = _filtrar_por_variante(arquivos_disponiveis, "REC115")
 
-            # Busca primeiro no grupo primario (mesma variante)
+            # Busca no grupo primario
             status, match_obj = _buscar_em_grupo(nome_norm, grupo_primario, USAR_LLM)
 
-            # Se nao achou, busca no secundario (outra variante)
+            # Se nao achou match valido (match_obj None), busca no secundario
             var_diff = False
-            if not status:
+            if not match_obj:
                 status, match_obj = _buscar_em_grupo(nome_norm, grupo_secundario, USAR_LLM)
-                if status:
+                if match_obj:
                     var_diff = True
 
-            # Fallback direto: se ainda nao achou, vasculha TODOS os arquivos
-            if not status and tipo_lista == "115":
+            # Fallback: vasculha TODOS os arquivos se ainda nao achou
+            if not match_obj and tipo_lista == "115":
                 for a in arquivos_disponiveis:
                     if a["norm"] == nome_norm:
                         status, match_obj = "ENCONTRADO", a
