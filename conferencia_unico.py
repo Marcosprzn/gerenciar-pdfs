@@ -29,7 +29,7 @@ IGNORAR_NOMES = {
     'PIS', 'PROC.', 'DATA', 'OBS',
     'TOTAL', 'TOTAIS', 'SUBTOTAL',
 }
-RE_VARIANTE = re.compile(r'(REC\s*\.?\s*\d+)', re.IGNORECASE)
+RE_VARIANTE = re.compile(r'(REC\s*\.?\s*\d+|\b115\b)', re.IGNORECASE)
 
 # ============================================================
 # UTILITARIAS
@@ -59,9 +59,12 @@ def similaridade(a, b):
 def extrair_variante(nome):
     m = RE_VARIANTE.search(nome)
     if m:
-        tag = re.sub(r'[\s\.]', '', m.group(1)).upper()
-        stem = nome[:m.start()].strip()
-        return stem, tag
+        raw = m.group(1)
+        tag = re.sub(r'[\s\.]', '', raw).upper()
+        if tag == '115':
+            tag = 'REC115'
+        stem = nome[:m.start()].strip() + ' ' + nome[m.end():].strip()
+        return stem.strip(), tag
     return nome, None
 
 def eh_nome_valido(texto):

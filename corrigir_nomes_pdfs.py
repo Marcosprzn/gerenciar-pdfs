@@ -83,17 +83,17 @@ def verificar_abreviacao(nome_planilha, nome_pdf):
         else: idx_p += 1; idx_f += 1
     return match_count >= max(len(tokens_p), len(tokens_f)) - 1
 
-RE_VARIANTE = re.compile(r'(REC\s*\.?\s*\d+)', re.IGNORECASE)
+RE_VARIANTE = re.compile(r'(REC\s*\.?\s*\d+|\b115\b)', re.IGNORECASE)
 
 def extrair_variante(nome_sem_ext):
-    """Detecta sufixo como 'REC. 115', 'REC 115' no nome.
-    Retorna (nome_stem, variante) onde variante e 'REC115' (sem pontuacao) ou None."""
     m = RE_VARIANTE.search(nome_sem_ext)
     if m:
         raw = m.group(1)
         tag = re.sub(r'[\s\.]', '', raw).upper()
-        stem = nome_sem_ext[:m.start()].strip()
-        return stem, tag
+        if tag == '115':
+            tag = 'REC115'
+        stem = nome_sem_ext[:m.start()].strip() + ' ' + nome_sem_ext[m.end():].strip()
+        return stem.strip(), tag
     return nome_sem_ext, None
 
 def encontrar_melhor_match(nome_busca, arquivos_ref):
