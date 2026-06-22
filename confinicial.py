@@ -467,19 +467,17 @@ def verificar_pdfs(df, pasta_pdfs):
             # Se nao achou, busca no secundario (outra variante)
             var_diff = False
             if not status:
-                if tipo_lista == "115":
-                    # Debug: procura exato em todos os arquivos
-                    for a in arquivos_disponiveis:
-                        if a["norm"] == nome_norm:
-                            print(f'  [DEBUG 115] ARQUIVO ENCONTRADO: {a["real"]} (variante={a["variante"]})')
-                            print(f'  [DEBUG 115] Esta no grupo secundario? {a in grupo_secundario}')
-                            # Testa exact match
-                            print(f'  [DEBUG 115] nome_norm in arq[norm]? {nome_norm in a["norm"]}')
-                            print(f'  [DEBUG 115] arq[norm] in nome_norm? {a["norm"] in nome_norm}')
-                            print(f'  [DEBUG 115] nome_norm == arq[norm]? {nome_norm == a["norm"]}')
                 status, match_obj = _buscar_em_grupo(nome_norm, grupo_secundario, USAR_LLM)
                 if status:
                     var_diff = True
+
+            # Fallback direto: se ainda nao achou, vasculha TODOS os arquivos
+            if not status and tipo_lista == "115":
+                for a in arquivos_disponiveis:
+                    if a["norm"] == nome_norm:
+                        status, match_obj = "ENCONTRADO", a
+                        var_diff = True
+                        break
 
             # Status final
             if match_obj:
