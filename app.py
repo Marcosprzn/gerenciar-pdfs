@@ -93,14 +93,14 @@ EXCLUIR_PADROES = [
     'PROTOCOLO', 'COMPENSACAO', 'DECLARACAO',
 ]
 CONECTORES = {'DE', 'DA', 'DO', 'DOS', 'DAS'}
-RE_VARIANTE = re.compile(r'(REC\s*\.?\s*\d+)', re.IGNORECASE)
+RE_VARIANTE = re.compile(r'(REC\s*\.?\s*\d+|\b115\b)', re.IGNORECASE)
 
 # ─── Utilitárias ───────────────────────────────────────────────────────
 def normalizar(t):
     if not isinstance(t, str): return ''
     s = unicodedata.normalize('NFKD', t)
     s = ''.join(c for c in s if not unicodedata.combining(c)).upper()
-    return ' '.join(s.replace('.', '').replace('-', ' ').replace('_', ' ').split())
+    return ' '.join(s.replace('.', '').replace('-', ' ').replace('_', ' ').replace('(', '').replace(')', '').split())
 
 def similaridade(a, b):
     return SequenceMatcher(None, a, b).ratio()
@@ -119,8 +119,12 @@ def levenshtein(a, b):
 def extrair_variante(nome):
     m = RE_VARIANTE.search(nome)
     if m:
-        tag = re.sub(r'[\s\.]', '', m.group(1)).upper()
-        return nome[:m.start()].strip(), tag
+        raw = m.group(1)
+        tag = re.sub(r'[\s\.]', '', raw).upper()
+        if tag == '115':
+            tag = 'REC115'
+        stem = nome[:m.start()].strip() + ' ' + nome[m.end():].strip()
+        return stem.strip(), tag
     return nome, None
 
 def eh_pdf_valido(f):
