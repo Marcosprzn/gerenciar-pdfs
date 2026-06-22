@@ -245,10 +245,12 @@ def ler_planilha_fgts(caminho_arquivo):
                 for col_idx in range(idx_nomes):
                     c_val = linha[col_idx]
                     if pd.notna(c_val):
+                        val_str = str(c_val).strip()
+                        if val_str.endswith('.0'): val_str = val_str[:-2]
                         # Verifica se parece um PIS (11 dígitos)
-                        digitos = re.sub(r'\D', '', str(c_val))
+                        digitos = re.sub(r'\D', '', val_str)
                         if len(digitos) == 11:
-                            val_pis = c_val
+                            val_pis = val_str
                             break
 
             dados.append({
