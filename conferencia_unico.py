@@ -109,7 +109,7 @@ def verificar_abreviacao(a, b):
         else: i += 1; j += 1
     return match >= max(len(ta), len(tb)) - 1
 
-def buscar_melhor_match(nome_busca, pdfs_disponiveis, usar_llm=False, nivel_rigor=3):
+def buscar_melhor_match(nome_busca, pdfs_disponiveis, usar_llm=False, nivel_rigor=3, tipo_lista="PADRAO"):
     stem, var = extrair_variante(nome_busca)
     nome_norm = normalizar(stem)
 
