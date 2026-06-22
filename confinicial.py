@@ -429,45 +429,51 @@ def verificar_pdfs(df, pasta_pdfs):
 
         return None, None
 
-    status_lista = []
-    arquivo_encontrado_lista = []
+    status_lista = [""] * len(df)
+    arquivo_encontrado_lista = [""] * len(df)
 
-    for _, row in df.iterrows():
-        nome_planilha = row['NOMES']
-        tipo_lista = row.get('TIPO_LISTA', 'PADRAO')
+    # Processa 115 primeiro (arquivos podem ser tomados por PADRAO depois)
+    for ordem in ["115", "PADRAO"]:
+        for idx, row in df.iterrows():
+            if status_lista[idx]:
+                continue
+            nome_planilha = row['NOMES']
+            tipo_lista = row.get('TIPO_LISTA', 'PADRAO')
+            if tipo_lista != ordem:
+                continue
 
-        nome_norm = normalizar_texto(nome_planilha)
+            nome_norm = normalizar_texto(nome_planilha)
 
-        # Define o grupo primario baseado no tipo da lista
-        if tipo_lista == "115":
-            grupo_primario = _filtrar_por_variante(arquivos_disponiveis, "REC115")
-            grupo_secundario = _filtrar_sem_variante(arquivos_disponiveis)
-        else:
-            grupo_primario = _filtrar_sem_variante(arquivos_disponiveis)
-            grupo_secundario = _filtrar_por_variante(arquivos_disponiveis, "REC115")
+            # Define o grupo primario baseado no tipo da lista
+            if tipo_lista == "115":
+                grupo_primario = _filtrar_por_variante(arquivos_disponiveis, "REC115")
+                grupo_secundario = _filtrar_sem_variante(arquivos_disponiveis)
+            else:
+                grupo_primario = _filtrar_sem_variante(arquivos_disponiveis)
+                grupo_secundario = _filtrar_por_variante(arquivos_disponiveis, "REC115")
 
-        # Busca primeiro no grupo primario (mesma variante)
-        status, match_obj = _buscar_em_grupo(nome_norm, grupo_primario, USAR_LLM)
+            # Busca primeiro no grupo primario (mesma variante)
+            status, match_obj = _buscar_em_grupo(nome_norm, grupo_primario, USAR_LLM)
 
-        # Se nao achou, busca no secundario (outra variante)
-        var_diff = False
-        if not status:
-            status, match_obj = _buscar_em_grupo(nome_norm, grupo_secundario, USAR_LLM)
-            if status:
-                var_diff = True
+            # Se nao achou, busca no secundario (outra variante)
+            var_diff = False
+            if not status:
+                status, match_obj = _buscar_em_grupo(nome_norm, grupo_secundario, USAR_LLM)
+                if status:
+                    var_diff = True
 
-        # Status final
-        if match_obj:
-            arquivos_disponiveis.remove(match_obj)
-            if tipo_lista == "115" and "ENCONTRADO" in status:
-                status = "ENCONTRADO COMO 115"
-            if var_diff and "ENCONTRADO" in status:
-                status = status + " (VAR DIFF)"
-            status_lista.append(status)
-            arquivo_encontrado_lista.append(os.path.splitext(match_obj["real"])[0])
-        else:
-            status_lista.append("NÃO ENCONTRADO NO .PDF")
-            arquivo_encontrado_lista.append("")
+            # Status final
+            if match_obj:
+                arquivos_disponiveis.remove(match_obj)
+                if tipo_lista == "115" and "ENCONTRADO" in status:
+                    status = "ENCONTRADO COMO 115"
+                if var_diff and "ENCONTRADO" in status:
+                    status = status + " (VAR DIFF)"
+                status_lista[idx] = status
+                arquivo_encontrado_lista[idx] = os.path.splitext(match_obj["real"])[0]
+            else:
+                status_lista[idx] = "NÃO ENCONTRADO NO .PDF"
+                arquivo_encontrado_lista[idx] = ""
 
     df['Status PDF'] = status_lista
     df['Nome do Arquivo Encontrado'] = arquivo_encontrado_lista
