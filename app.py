@@ -701,10 +701,10 @@ def analisar_conciliacao():
         for prefixo in [
             "NÃO ENCONTRADO NO .PDF",
             "POSSÍVEL ERRO NOMINAL",
+            "ENCONTRADO VIA LLM",
             "ENCONTRADO COMO 115",
             "ENCONTRADO COM ABREVIAÇÃO",
             "ENCONTRADO",
-            "ENCONTRADO VIA LLM"
         ]:
             if str(s).startswith(prefixo):
                 return prefixo

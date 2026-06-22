@@ -625,6 +625,7 @@ def salvar_com_resumo(df, caminho_saida, total_pdfs=None):
         for prefixo in [
             "NÃO ENCONTRADO NO .PDF",
             "POSSÍVEL ERRO NOMINAL",
+            "ENCONTRADO VIA LLM",
             "ENCONTRADO COMO 115",
             "ENCONTRADO COM ABREVIAÇÃO",
             "ENCONTRADO",
