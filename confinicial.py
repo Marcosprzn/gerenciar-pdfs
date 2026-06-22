@@ -109,17 +109,19 @@ def normalizar_texto(texto):
     texto_limpo = " ".join(texto_sem_hifen.split())
     return texto_limpo
 
-RE_VARIANTE = re.compile(r'(REC\s*\.?\s*\d+)', re.IGNORECASE)
+RE_VARIANTE = re.compile(r'(REC\s*\.?\s*\d+|\b115\b)', re.IGNORECASE)
 
 def extrair_variante(nome_sem_ext):
-    """Detecta sufixo como 'REC. 115', 'REC 115' no nome do arquivo.
+    """Detecta sufixo como 'REC. 115', 'REC 115' ou '115' no nome do arquivo.
     Retorna (nome_stem, variante) onde variante e 'REC115' (sem pontuacao) ou None."""
     m = RE_VARIANTE.search(nome_sem_ext)
     if m:
         raw = m.group(1)
         tag = re.sub(r'[\s\.]', '', raw).upper()
-        stem = nome_sem_ext[:m.start()].strip()
-        return stem, tag
+        if tag == '115':
+            tag = 'REC115'
+        stem = nome_sem_ext[:m.start()].strip() + ' ' + nome_sem_ext[m.end():].strip()
+        return stem.strip(), tag
     return nome_sem_ext, None
 
 def calcular_similaridade(a, b):
