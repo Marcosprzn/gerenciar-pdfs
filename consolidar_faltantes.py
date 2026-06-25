@@ -7,7 +7,7 @@ Consolida relatorios .xlsx em uma planilha formatada com duas abas:
 Escaneia automaticamente a estrutura:
 pasta_raiz/ -> ANO/ -> ANO CONFERIDOS/ -> relatorio.xlsx
 """
-import os, sys, re
+import os, sys, re, unicodedata
 import tkinter as tk
 from tkinter import filedialog
 import pandas as pd
@@ -90,12 +90,56 @@ for arq in sorted(arquivos):
         print(f"  Coluna nao encontrada em {nome}")
         continue
 
+import unicodedata
+
+def normalizar_status(s):
+    """Remove acentos e pontuacao para comparar status."""
+    s = unicodedata.normalize('NFKD', str(s))
+    s = ''.join(c for c in s if not unicodedata.combining(c))
+    return s.upper().replace('.', '').replace(',', '').strip()
+
+
+for arq in sorted(arquivos):
+    nome = os.path.basename(arq)
+    m = re.search(r"(?<!\d)(\d{2})[-_ ](\d{2,4})(?!\d)", nome)
+    mes_ano = None
+    if m:
+        mes = m.group(1)
+        ano = "20" + m.group(2) if len(m.group(2)) == 2 else m.group(2)
+        mes_ano = f"{mes}/{ano}"
+
+    try:
+        df = pd.read_excel(arq, sheet_name='Dados')
+    except Exception:
+        try:
+            df = pd.read_excel(arq)
+        except Exception as e:
+            print(f"  ERRO ao ler {nome}: {e}")
+            continue
+
+    col_status = None
+    col_nome = None
+    col_pdf = None
+    for col in df.columns:
+        cs = str(col).lower()
+        if 'status' in cs:
+            col_status = col
+        elif 'nome' in cs:
+            col_nome = col
+        elif 'arquivo' in cs or 'encontrado' in cs:
+            col_pdf = col
+
+    if not col_status:
+        print(f"  Coluna nao encontrada em {nome}")
+        continue
+
     for _, row in df.iterrows():
-        status = str(row[col_status])
+        status_raw = str(row[col_status])
+        status = normalizar_status(status_raw)
         nome_pessoa = str(row.get(col_nome or 'NOMES', ''))
         nome_pdf = str(row.get(col_pdf or 'Nome do Arquivo Encontrado', ''))
 
-        if 'NÃO ENCONTRADO NO .PDF' in status.upper():
+        if 'NAO ENCONTRADO NO PDF' in status:
             if nome_pessoa and nome_pessoa not in ('', 'nan', 'None'):
                 falta_pdf.append({
                     'mes': mes_ano or nome,
@@ -117,6 +161,13 @@ falta_excel.sort(key=lambda x: (x['mes'], x['nome_pdf']))
 
 # Cria planilha
 from collections import Counter
+import unicodedata
+
+def normalizar_status(s):
+    """Remove acentos e pontuacao para comparar status."""
+    s = unicodedata.normalize('NFKD', str(s))
+    s = ''.join(c for c in s if not unicodedata.combining(c))
+    return s.upper().replace('.', '').replace(',', '').strip()
 pessoas_count = Counter(item['nome'] for item in falta_pdf)
 
 caminho_saida = os.path.join(pasta_raiz, 'consolidado_faltantes.xlsx')
