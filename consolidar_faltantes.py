@@ -3,6 +3,9 @@
 Consolida relatorios .xlsx em uma planilha formatada com duas abas:
 - Falta PDF: pessoas na planilha sem PDF correspondente
 - Falta no Excel: PDFs na pasta sem registro na planilha
+
+Escaneia automaticamente a estrutura:
+pasta_raiz/ -> ANO/ -> ANO CONFERIDOS/ -> relatorio.xlsx
 """
 import os, sys, re
 import tkinter as tk
@@ -16,15 +19,40 @@ root.withdraw()
 root.attributes('-topmost', True)
 root.update()
 
-arquivos = filedialog.askopenfilenames(
-    title="Selecione os relatorios .xlsx",
-    filetypes=[("Relatorios", "*.xlsx"), ("Todos", "*.*")]
+pasta_raiz = filedialog.askdirectory(
+    title="Selecione a PASTA RAIZ (que contem as pastas 2007, 2008, 2009...)"
 )
 root.destroy()
 
-if not arquivos:
-    print("Nenhum arquivo selecionado.")
+if not pasta_raiz:
+    print("Nenhuma pasta selecionada.")
     sys.exit(1)
+
+# Escaneia estrutura: ANO/ -> ANO CONFERIDOS/ -> .xlsx
+arquivos = []
+for item in sorted(os.listdir(pasta_raiz)):
+    caminho_ano = os.path.join(pasta_raiz, item)
+    if not os.path.isdir(caminho_ano):
+        continue
+    # Procura subpastas com "CONFERIDOS" no nome
+    for sub in sorted(os.listdir(caminho_ano)):
+        caminho_sub = os.path.join(caminho_ano, sub)
+        if not os.path.isdir(caminho_sub):
+            continue
+        if 'CONFERIDOS' in sub.upper() or 'CONFERIDO' in sub.upper():
+            for f in sorted(os.listdir(caminho_sub)):
+                if f.lower().endswith('.xlsx'):
+                    arquivos.append(os.path.join(caminho_sub, f))
+                    break  # so pega o primeiro xlsx de cada pasta CONFERIDOS
+
+if not arquivos:
+    print("Nenhum arquivo .xlsx encontrado na estrutura esperada.")
+    sys.exit(1)
+
+print(f"Encontrados {len(arquivos)} relatorios:\n")
+for a in arquivos:
+    print(f"  {os.path.basename(a)}  ({os.path.dirname(a)})")
+print()
 
 falta_pdf = []
 falta_excel = []
@@ -92,7 +120,7 @@ falta_excel.sort(key=lambda x: (x['mes'], x['nome_pdf']))
 from collections import Counter
 pessoas_count = Counter(item['nome'] for item in falta_pdf)
 
-caminho_saida = os.path.join(os.path.dirname(arquivos[0]), 'consolidado_faltantes.xlsx')
+caminho_saida = os.path.join(pasta_raiz, 'consolidado_faltantes.xlsx')
 with pd.ExcelWriter(caminho_saida, engine='openpyxl') as writer:
     df_falta_pdf = pd.DataFrame(falta_pdf) if falta_pdf else pd.DataFrame(columns=['mes', 'nome', 'proc', 'pis'])
     df_falta_excel = pd.DataFrame(falta_excel) if falta_excel else pd.DataFrame(columns=['mes', 'nome_pdf', 'arquivo'])
