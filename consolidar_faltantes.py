@@ -139,6 +139,10 @@ for arq in sorted(arquivos):
         nome_pessoa = str(row.get(col_nome or 'NOMES', ''))
         nome_pdf = str(row.get(col_pdf or 'Nome do Arquivo Encontrado', ''))
 
+        # Debug: mostra primeiros status encontrados
+        if len(falta_pdf) + len(falta_excel) < 5:
+            print(f'  [STATUS] Original={status_raw!r:50s} Normalizado={status!r:40s} Nome={nome_pessoa!r}')
+
         if 'NAO ENCONTRADO NO PDF' in status:
             if nome_pessoa and nome_pessoa not in ('', 'nan', 'None'):
                 falta_pdf.append({
