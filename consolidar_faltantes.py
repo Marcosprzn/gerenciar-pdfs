@@ -74,22 +74,6 @@ for arq in sorted(arquivos):
             print(f"  ERRO ao ler {nome}: {e}")
             continue
 
-    col_status = None
-    col_nome = None
-    col_pdf = None
-    for col in df.columns:
-        cs = str(col).lower()
-        if 'status' in cs:
-            col_status = col
-        elif 'nome' in cs:
-            col_nome = col
-        elif 'arquivo' in cs or 'encontrado' in cs:
-            col_pdf = col
-
-    if not col_status:
-        print(f"  Coluna nao encontrada em {nome}")
-        continue
-
 import unicodedata
 
 def normalizar_status(s):
@@ -124,10 +108,10 @@ for arq in sorted(arquivos):
         cs = str(col).lower()
         if 'status' in cs:
             col_status = col
-        elif 'nome' in cs:
-            col_nome = col
         elif 'arquivo' in cs or 'encontrado' in cs:
             col_pdf = col
+        elif 'nome' in cs:
+            col_nome = col
 
     if not col_status:
         print(f"  Coluna nao encontrada em {nome}")
@@ -138,10 +122,6 @@ for arq in sorted(arquivos):
         status = normalizar_status(status_raw)
         nome_pessoa = str(row.get(col_nome or 'NOMES', ''))
         nome_pdf = str(row.get(col_pdf or 'Nome do Arquivo Encontrado', ''))
-
-        # Debug: mostra primeiros status encontrados
-        if len(falta_pdf) + len(falta_excel) < 5:
-            print(f'  [STATUS] Original={status_raw!r:50s} Normalizado={status!r:40s} Nome={nome_pessoa!r}')
 
         if 'NAO ENCONTRADO' in status:
             if nome_pessoa and nome_pessoa not in ('', 'nan', 'None'):
