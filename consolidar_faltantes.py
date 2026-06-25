@@ -43,7 +43,6 @@ for item in sorted(os.listdir(pasta_raiz)):
             for f in sorted(os.listdir(caminho_sub)):
                 if f.lower().endswith('.xlsx'):
                     arquivos.append(os.path.join(caminho_sub, f))
-                    break  # so pega o primeiro xlsx de cada pasta CONFERIDOS
 
 if not arquivos:
     print("Nenhum arquivo .xlsx encontrado na estrutura esperada.")
