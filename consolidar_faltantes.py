@@ -159,9 +159,17 @@ for arq in sorted(arquivos):
                     'arquivo': nome,
                 })
 
-# Ordena
-falta_pdf.sort(key=lambda x: (x['mes'], x['nome']))
-falta_excel.sort(key=lambda x: (x['mes'], x['nome_pdf']))
+def chave_mes(item):
+    """Extrai (ano, mes) para ordenar por mes dentro do mesmo ano."""
+    m = item['mes']
+    if '/' in m:
+        partes = m.split('/')
+        return (int(partes[1]), int(partes[0]))
+    return (9999, 9999)
+
+# Ordena por ano primeiro, depois mes, depois nome
+falta_pdf.sort(key=lambda x: (chave_mes(x), x['nome']))
+falta_excel.sort(key=lambda x: (chave_mes(x), x['nome_pdf']))
 
 # Cria planilha
 from collections import Counter
