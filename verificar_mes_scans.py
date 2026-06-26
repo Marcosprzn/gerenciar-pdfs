@@ -9,6 +9,12 @@ from tkinter import filedialog, messagebox, simpledialog
 from PIL import Image
 import fitz  # PyMuPDF
 import pytesseract
+try:
+    import openpyxl
+except ImportError:
+    print("Instalando biblioteca openpyxl para gerar Excel...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "openpyxl"])
+    import openpyxl
 
 # Caminhos possíveis do Tesseract (64-bit e 32-bit)
 TESSERACT_PATHS = [
@@ -241,6 +247,33 @@ def run():
         print(f"\n[!] DICA: Um arquivo 'DEBUG_ERROS_OCR.txt' foi criado na pasta {pasta_pdfs}.")
         print("    Abra ele para ver EXATAMENTE o que a inteligência leu e me avise para ajustarmos o código!")
             
+    # ------ GERAÇÃO DO RELATÓRIO EXCEL ------
+    try:
+        wb = openpyxl.Workbook()
+        ws_ok = wb.active
+        ws_ok.title = "OK"
+        ws_ok.append(["Nome do Arquivo", "Mês Encontrado"])
+        
+        ws_erro = wb.create_sheet(title="Errados")
+        ws_erro.append(["Nome do Arquivo", "Motivo / Leitura"])
+        
+        for arq in ok_list:
+            ws_ok.append([arq, mes_alvo])
+            
+        for arq, motivo in erro_list:
+            ws_erro.append([arq, motivo])
+            
+        # Ajusta largura das colunas
+        for ws in [ws_ok, ws_erro]:
+            ws.column_dimensions['A'].width = 50
+            ws.column_dimensions['B'].width = 40
+            
+        caminho_excel = os.path.join(pasta_pdfs, f"Relatorio_Auditoria_{mes_alvo.replace('/', '-')}.xlsx")
+        wb.save(caminho_excel)
+        print(f"\n[SUCESSO] Relatório Excel gerado: {caminho_excel}")
+    except Exception as e:
+        print(f"\n[ERRO] Não foi possível gerar o Excel: {e}")
+
     print("\nAuditoria finalizada!")
     input("\nPressione ENTER para sair...")
 
