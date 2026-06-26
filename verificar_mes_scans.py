@@ -28,14 +28,14 @@ def _get_tesseract_url():
     """Retorna a URL do instalador Tesseract compatível com o Windows atual."""
     major, minor = _get_windows_version()
     if major < 10:
-        # Win8 nao tem instalador automatico disponivel - abrir pagina de download
-        return None
+        # Win8: SourceForge hospeda versão 3.02 compatível
+        return "https://sourceforge.net/projects/tesseract-ocr-alt/files/tesseract-ocr-setup-3.02.02.exe/download"
     else:
-        print(f"[INFO] Windows {major}.{minor} detectado - baixando Tesseract 5 (versão atual)")
-        return "https://github.com/UB-Mannheim/tesseract/releases/download/v5.5.0/tesseract-ocr-w64-setup-5.5.0.20241111.exe"
+        print(f"[INFO] Windows {major}.{minor} detectado - baixando Tesseract 5.4")
+        return "https://github.com/UB-Mannheim/tesseract/releases/download/v5.4.0.20240606/tesseract-ocr-w64-setup-5.4.0.20240606.exe"
 
 # URL da pagina de download para o usuario baixar manualmente no Win8
-TESSERACT_WIN8_PAGE = "https://digi.bib.uni-mannheim.de/tesseract/"
+TESSERACT_WIN8_PAGE = "https://sourceforge.net/projects/tesseract-ocr-alt/files/tesseract-ocr-setup-3.02.02.exe/download"
 
 def check_tesseract():
     # Tenta achar o executável nos caminhos conhecidos
@@ -52,23 +52,9 @@ def check_tesseract():
     
     major, minor = _get_windows_version()
     
-    if major < 10:
-        # Win8: sem instalador automatico, orientar usuario para download manual
-        msg = (
-            "O Tesseract OCR não está instalado.\n\n"
-            f"Seu Windows foi detectado como versão {major}.{minor} (Windows 8/7).\n\n"
-            "Para este Windows, o download precisa ser feito manualmente.\n"
-            "Clique em OK para abrir a página de download no navegador.\n\n"
-            "Na página, baixe o arquivo 'tesseract-ocr-setup-3.05.02.exe'\n"
-            "e instale normalmente.\n\n"
-            "APÓS CONCLUIR A INSTALAÇÃO, inicie este script novamente."
-        )
-        messagebox.showinfo("Instalação Manual Necessária", msg)
-        import webbrowser
-        webbrowser.open(TESSERACT_WIN8_PAGE)
-        return False
-
-    versao_label = "5 (versão atual)"
+    url = _get_tesseract_url()
+    versao_label = "3.02 (compatível com Windows 8/7)" if major < 10 else "5.4 (versão atual)"
+    
     msg = (
         "O Tesseract OCR não está instalado ou não foi encontrado.\n\n"
         f"Seu Windows foi detectado como versão {major}.{minor}.\n"
@@ -76,7 +62,6 @@ def check_tesseract():
         "Deseja baixar e instalar agora?"
     )
     if messagebox.askyesno("Tesseract OCR Ausente", msg):
-        url = _get_tesseract_url()
         print(f"Baixando de: {url}")
         print("Por favor, aguarde...")
         try:
@@ -91,12 +76,12 @@ def check_tesseract():
             subprocess.Popen([exe_path])
         except Exception as e:
             import webbrowser
-            webbrowser.open("https://github.com/UB-Mannheim/tesseract/releases/tag/v5.5.0.20241111")
+            webbrowser.open(url)
             messagebox.showinfo(
                 "Download Manual",
                 f"O download automático falhou (Erro: {e}).\n\n"
-                "O instalador está sendo aberto no seu navegador agora.\n"
-                "Clique em 'Salvar arquivo' e instale manualmente.\n\n"
+                "O link de download está sendo aberto no navegador.\n"
+                "Salve o arquivo e instale manualmente.\n\n"
                 "APÓS CONCLUIR A INSTALAÇÃO, inicie este script novamente."
             )
     return False
