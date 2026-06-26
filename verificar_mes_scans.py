@@ -174,11 +174,20 @@ def run():
                 print(f"[OK - MES: {mes_alvo}]")
                 ok_list.append(f)
             else:
-                # Verifica se é a foto correta da capa
-                is_capa = re.search(r'(SEFIP|F\.?G\.?T\.?S|DEPOSITADO)', texto_ocr, re.IGNORECASE)
+                # Verifica se é a foto correta da capa (Tesseract pode colocar espaços entre as letras)
+                is_capa = re.search(r'(S\s*E\s*F\s*I\s*P|F\s*\.?\s*G\s*\.?\s*T\s*\.?\s*S|D\s*E\s*P\s*O\s*S\s*I\s*T\s*A\s*D\s*O|M\s*[EÉ]?\s*S\s*[=:-_]|U\s*S\s*I\s*V\s*A\s*L\s*E|R\s*E\s*C\s*L\s*A\s*M\s*A\s*T)', texto_ocr, re.IGNORECASE)
                 if not is_capa:
                     print("[FOTO DIFERENTE DO ESPERADO]")
-                    erro_list.append((f, "Foto diferente do esperado (não achou SEFIP/FGTS)"))
+                    erro_list.append((f, "Foto diferente do esperado (não achou SEFIP/FGTS/MES)"))
+                    
+                    # Salva no log mesmo se a foto for diferente pra podermos analisar
+                    try:
+                        with open(os.path.join(pasta_pdfs, "DEBUG_ERROS_OCR.txt"), "a", encoding="utf-8") as logf:
+                            logf.write(f"=== TEXTO BRUTO (FOTO DIFERENTE) DO ARQUIVO: {f} ===\n")
+                            logf.write(texto_ocr)
+                            logf.write("\n===========================================\n\n")
+                    except:
+                        pass
                     continue
 
                 # Tenta capturar QUALQUER mês que esteja escrito após "MES ="
