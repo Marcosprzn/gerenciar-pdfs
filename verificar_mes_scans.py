@@ -119,7 +119,15 @@ def run():
         print("Operação cancelada.")
         return
 
-    mes_alvo = simpledialog.askstring("Mês Alvo", "Qual o mês e ano que deve estar na página?\n\nExemplo: 01/2007", parent=root)
+    # Tenta extrair o mes alvo do nome da pasta (ex: "01-SEFIP FGTS - COMPETÊNCIA 01-2008")
+    nome_pasta = os.path.basename(pasta_pdfs)
+    match_pasta = re.search(r'(\d{2})\s*[-/]\s*(\d{4})', nome_pasta)
+    if match_pasta:
+        mes_sugerido = f"{match_pasta.group(1)}/{match_pasta.group(2)}"
+    else:
+        mes_sugerido = "01/2007"
+
+    mes_alvo = simpledialog.askstring("Mês Alvo", "Qual o mês e ano que deve estar na página?\n\n(Detectado automaticamente da pasta)", initialvalue=mes_sugerido, parent=root)
     if not mes_alvo:
         print("Mês não informado. Operação cancelada.")
         return
@@ -163,22 +171,38 @@ def run():
             
             # Pesquisa o padrao
             if re.search(padrao_regex, texto_ocr, re.IGNORECASE):
-                print("[OK]")
+                print(f"[OK - MES: {mes_alvo}]")
                 ok_list.append(f)
             else:
-                # Fallback: OCR as vezes nao pega a palavra MES, tenta achar apenas o "01/2007" proximo a nada
-                partes = mes_alvo.split('/')
-                if len(partes) == 2:
-                    apenas_data_regex = partes[0].replace('0', '[0O]') + r'\s*[/|7lIi\-1]\s*' + partes[1].replace('0', '[0O]')
-                    if re.search(apenas_data_regex, texto_ocr):
-                        print("[OK (Apenas Data Encontrada sem palavra MES)]")
-                        ok_list.append(f)
+                # Verifica se é a foto correta da capa
+                is_capa = re.search(r'(SEFIP|F\.?G\.?T\.?S|DEPOSITADO)', texto_ocr, re.IGNORECASE)
+                if not is_capa:
+                    print("[FOTO DIFERENTE DO ESPERADO]")
+                    erro_list.append((f, "Foto diferente do esperado (não achou SEFIP/FGTS)"))
+                    continue
+
+                # Tenta capturar QUALQUER mês que esteja escrito após "MES ="
+                match_generico = re.search(r'M[EÉ]?S\s*[=:-_]?\s*([A-Za-z0-9]{2}\s*[/|7lIi\-1]\s*[A-Za-z0-9]{4})', texto_ocr, re.IGNORECASE)
+                if match_generico:
+                    mes_lido = match_generico.group(1)
+                    # Limpa os erros comuns de OCR
+                    mes_limpo = mes_lido.replace('O','0').replace('o','0').replace('I','1').replace('l','1').replace('i','1').replace('|','/').replace('\\','/').replace(' ', '').replace('7','/').replace('-', '/')
+                    # Como 7 pode ser barra, as vezes o ano fica quebrado se tiver 7, mas para visualizacao ta ok
+                    
+                    if len(mes_limpo) >= 7 and mes_limpo[-4:].isdigit() and mes_limpo[:2].isdigit():
+                        mes_limpo = f"{mes_limpo[:2]}/{mes_limpo[-4:]}"
+                    
+                    print(f"[ERRADO - LIDO: {mes_limpo}]")
+                    erro_list.append((f, f"Mês errado, lido: {mes_limpo}"))
+                else:
+                    # Fallback: tenta achar qualquer XX/XXXX na pagina solto
+                    match_data = re.search(r'(\d{2})\s*[/|7lIi\-1]\s*(\d{4})', texto_ocr)
+                    if match_data:
+                        print(f"[ERRADO - ENCONTRADO DATA NA PAGINA: {match_data.group(1)}/{match_data.group(2)}]")
+                        erro_list.append((f, f"Data perdida na pagina: {match_data.group(1)}/{match_data.group(2)}"))
                     else:
                         print("[MÊS NÃO ENCONTRADO]")
                         erro_list.append((f, "Mês não encontrado na OCR"))
-                else:
-                    print("[MÊS NÃO ENCONTRADO]")
-                    erro_list.append((f, "Mês não encontrado na OCR"))
                     
                     # Salva o texto bruto em um arquivo de log para ajudar na depuração
                     try:
