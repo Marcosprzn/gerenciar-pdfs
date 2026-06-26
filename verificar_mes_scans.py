@@ -180,6 +180,15 @@ def run():
                     print("[MÊS NÃO ENCONTRADO]")
                     erro_list.append((f, "Mês não encontrado na OCR"))
                     
+                    # Salva o texto bruto em um arquivo de log para ajudar na depuração
+                    try:
+                        with open(os.path.join(pasta_pdfs, "DEBUG_ERROS_OCR.txt"), "a", encoding="utf-8") as logf:
+                            logf.write(f"=== TEXTO BRUTO DO ARQUIVO: {f} ===\n")
+                            logf.write(texto_ocr)
+                            logf.write("\n===========================================\n\n")
+                    except:
+                        pass
+                    
         except Exception as e:
             print(f"[ERRO DE LEITURA: {str(e)}]")
             erro_list.append((f, f"Erro ao processar: {str(e)}"))
@@ -196,6 +205,8 @@ def run():
         print("\nARQUIVOS COM POSSÍVEL ERRO:")
         for arq, motivo in erro_list:
             print(f" - {arq} ({motivo})")
+        print(f"\n[!] DICA: Um arquivo 'DEBUG_ERROS_OCR.txt' foi criado na pasta {pasta_pdfs}.")
+        print("    Abra ele para ver EXATAMENTE o que a inteligência leu e me avise para ajustarmos o código!")
             
     print("\nAuditoria finalizada!")
     input("\nPressione ENTER para sair...")
