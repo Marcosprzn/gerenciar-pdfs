@@ -164,69 +164,60 @@ def run():
                 erro_list.append((f, "PDF vazio"))
                 continue
                 
-            page = doc[0]
-            # Extrai como imagem
-            # O matrix(2,2) aumenta a resolução pra ajudar a OCR
-            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+            # Busca a foto da capa nas primeiras 5 páginas
+            capa_encontrada = False
             
-            # Converte o pixmap do PyMuPDF para Image do Pillow
-            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-            
-            # Executa o OCR
-            texto_ocr = pytesseract.image_to_string(img, lang='por+eng')
-            
-            # Pesquisa o padrao
-            if re.search(padrao_regex, texto_ocr, re.IGNORECASE):
-                print(f"[OK - MES: {mes_alvo}]")
-                ok_list.append(f)
-            else:
-                # Verifica se é a foto correta da capa (Tesseract pode colocar espaços entre as letras)
+            for num_pagina in range(min(len(doc), 5)):
+                page = doc[num_pagina]
+                pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                texto_ocr = pytesseract.image_to_string(img, lang='por+eng')
+                
+                # Verifica se a página atual parece ser a capa
                 is_capa = re.search(r'(S\s*E\s*F\s*I\s*P|F\s*\.?\s*G\s*\.?\s*T\s*\.?\s*S|D\s*E\s*P\s*O\s*S\s*I\s*T\s*A\s*D\s*O|M\s*[EÉ]?\s*S\s*[=:-_]|U\s*S\s*I\s*V\s*A\s*L\s*E|R\s*E\s*C\s*L\s*A\s*M\s*A\s*T)', texto_ocr, re.IGNORECASE)
-                if not is_capa:
-                    print("[FOTO DIFERENTE DO ESPERADO]")
-                    erro_list.append((f, "Foto diferente do esperado (não achou SEFIP/FGTS/MES)"))
-                    
-                    # Salva no log mesmo se a foto for diferente pra podermos analisar
-                    try:
-                        with open(os.path.join(pasta_pdfs, "DEBUG_ERROS_OCR.txt"), "a", encoding="utf-8") as logf:
-                            logf.write(f"=== TEXTO BRUTO (FOTO DIFERENTE) DO ARQUIVO: {f} ===\n")
-                            logf.write(texto_ocr)
-                            logf.write("\n===========================================\n\n")
-                    except:
-                        pass
-                    continue
-
-                # Tenta capturar QUALQUER mês que esteja escrito após "MES ="
-                match_generico = re.search(r'M[EÉ]?S\s*[=:-_]?\s*([A-Za-z0-9]{2}\s*[/|7lIi\-1]\s*[A-Za-z0-9]{4})', texto_ocr, re.IGNORECASE)
-                if match_generico:
-                    mes_lido = match_generico.group(1)
-                    # Limpa os erros comuns de OCR
-                    mes_limpo = mes_lido.replace('O','0').replace('o','0').replace('I','1').replace('l','1').replace('i','1').replace('|','/').replace('\\','/').replace(' ', '').replace('7','/').replace('-', '/')
-                    # Como 7 pode ser barra, as vezes o ano fica quebrado se tiver 7, mas para visualizacao ta ok
-                    
-                    if len(mes_limpo) >= 7 and mes_limpo[-4:].isdigit() and mes_limpo[:2].isdigit():
-                        mes_limpo = f"{mes_limpo[:2]}/{mes_limpo[-4:]}"
-                    
-                    print(f"[ERRADO - LIDO: {mes_limpo}]")
-                    erro_list.append((f, f"Mês errado, lido: {mes_limpo}"))
-                else:
-                    # Fallback: tenta achar qualquer XX/XXXX na pagina solto
-                    match_data = re.search(r'(\d{2})\s*[/|7lIi\-1]\s*(\d{4})', texto_ocr)
-                    if match_data:
-                        print(f"[ERRADO - ENCONTRADO DATA NA PAGINA: {match_data.group(1)}/{match_data.group(2)}]")
-                        erro_list.append((f, f"Data perdida na pagina: {match_data.group(1)}/{match_data.group(2)}"))
+                
+                if is_capa:
+                    capa_encontrada = True
+                    # Pesquisa o padrao
+                    if re.search(padrao_regex, texto_ocr, re.IGNORECASE):
+                        print(f"[OK - MES: {mes_alvo} - Achou na Pág {num_pagina + 1}]")
+                        ok_list.append(f)
                     else:
-                        print("[MÊS NÃO ENCONTRADO]")
-                        erro_list.append((f, "Mês não encontrado na OCR"))
-                    
-                    # Salva o texto bruto em um arquivo de log para ajudar na depuração
-                    try:
-                        with open(os.path.join(pasta_pdfs, "DEBUG_ERROS_OCR.txt"), "a", encoding="utf-8") as logf:
-                            logf.write(f"=== TEXTO BRUTO DO ARQUIVO: {f} ===\n")
-                            logf.write(texto_ocr)
-                            logf.write("\n===========================================\n\n")
-                    except:
-                        pass
+                        # Tenta capturar QUALQUER mês que esteja escrito após "MES ="
+                        match_generico = re.search(r'M[EÉ]?S\s*[=:-_]?\s*([A-Za-z0-9]{2}\s*[/|7lIi\-1]\s*[A-Za-z0-9]{4})', texto_ocr, re.IGNORECASE)
+                        if match_generico:
+                            mes_lido = match_generico.group(1)
+                            # Limpa os erros comuns de OCR
+                            mes_limpo = mes_lido.replace('O','0').replace('o','0').replace('I','1').replace('l','1').replace('i','1').replace('|','/').replace('\\','/').replace(' ', '').replace('7','/').replace('-', '/')
+                            
+                            if len(mes_limpo) >= 7 and mes_limpo[-4:].isdigit() and mes_limpo[:2].isdigit():
+                                mes_limpo = f"{mes_limpo[:2]}/{mes_limpo[-4:]}"
+                            
+                            print(f"[ERRADO - LIDO: {mes_limpo} (Pág {num_pagina + 1})]")
+                            erro_list.append((f, f"Mês errado na Pág {num_pagina + 1}, lido: {mes_limpo}"))
+                        else:
+                            # Fallback: tenta achar qualquer XX/XXXX na pagina solto
+                            match_data = re.search(r'(\d{2})\s*[/|7lIi\-1]\s*(\d{4})', texto_ocr)
+                            if match_data:
+                                print(f"[ERRADO - LEU DATA ALEATÓRIA: {match_data.group(1)}/{match_data.group(2)} (Pág {num_pagina + 1})]")
+                                erro_list.append((f, f"Data perdida na Pág {num_pagina + 1}: {match_data.group(1)}/{match_data.group(2)}"))
+                            else:
+                                print(f"[MÊS NÃO ENCONTRADO NA PÁG {num_pagina + 1}]")
+                                erro_list.append((f, f"Mês não encontrado na OCR (Pág {num_pagina + 1})"))
+                            
+                            # Salva o texto bruto para depuracao
+                            try:
+                                with open(os.path.join(pasta_pdfs, "DEBUG_ERROS_OCR.txt"), "a", encoding="utf-8") as logf:
+                                    logf.write(f"=== TEXTO BRUTO DO ARQUIVO: {f} (Pagina {num_pagina + 1}) ===\n")
+                                    logf.write(texto_ocr)
+                                    logf.write("\n===========================================\n\n")
+                            except:
+                                pass
+                    break # Se achou a capa e processou, sai do loop de páginas
+            
+            if not capa_encontrada:
+                print("[FOTO DIFERENTE DO ESPERADO NAS PRIMEIRAS PÁGINAS]")
+                erro_list.append((f, "Capa não encontrada nas primeiras páginas"))
                     
         except Exception as e:
             print(f"[ERRO DE LEITURA: {str(e)}]")
