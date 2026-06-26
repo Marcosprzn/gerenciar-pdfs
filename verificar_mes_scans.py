@@ -1,7 +1,7 @@
 import os
 import re
 import sys
-import webbrowser
+import platform
 import urllib.request
 import subprocess
 import tkinter as tk
@@ -10,37 +10,74 @@ from PIL import Image
 import fitz  # PyMuPDF
 import pytesseract
 
-# Caminho padrão do Tesseract no Windows
-TESSERACT_PATH = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-TESSERACT_URL = "https://github.com/UB-Mannheim/tesseract/releases/download/v5.5.0/tesseract-ocr-w64-setup-5.5.0.20241111.exe"
+# Caminhos possíveis do Tesseract (64-bit e 32-bit)
+TESSERACT_PATHS = [
+    r'C:\Program Files\Tesseract-OCR\tesseract.exe',
+    r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
+]
+
+def _get_windows_version():
+    """Retorna a versão major do Windows (ex: 6 para Win8, 10 para Win10/11)."""
+    try:
+        ver = sys.getwindowsversion()
+        return ver.major, ver.minor
+    except Exception:
+        return 10, 0  # assume Win10 se não conseguir detectar
+
+def _get_tesseract_url():
+    """Retorna a URL do instalador Tesseract compatível com o Windows atual."""
+    major, minor = _get_windows_version()
+    # Windows 8/8.1 -> major=6, minor=2/3
+    # Windows 10/11 -> major=10
+    if major < 10:
+        print(f"[INFO] Windows {major}.{minor} detectado - baixando Tesseract 3.05 (compatível com Win 7/8)")
+        return "https://digi.bib.uni-mannheim.de/tesseract/tesseract-ocr-setup-3.05.02.exe"
+    else:
+        print(f"[INFO] Windows {major}.{minor} detectado - baixando Tesseract 5 (versão atual)")
+        return "https://github.com/UB-Mannheim/tesseract/releases/download/v5.5.0/tesseract-ocr-w64-setup-5.5.0.20241111.exe"
 
 def check_tesseract():
-    if os.path.exists(TESSERACT_PATH):
-        pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
-        return True
+    # Tenta achar o executável nos caminhos conhecidos
+    for path in TESSERACT_PATHS:
+        if os.path.exists(path):
+            pytesseract.pytesseract.tesseract_cmd = path
+            print(f"[OK] Tesseract encontrado em: {path}")
+            return True
     
     # Se nao existe, informa o usuario
     root = tk.Tk()
     root.withdraw()
     root.attributes('-topmost', True)
     
+    major, minor = _get_windows_version()
+    versao_label = "3.05 (compatível com Windows 8)" if major < 10 else "5 (versão atual)"
+    
     msg = (
-        "O Tesseract OCR não está instalado ou não foi encontrado em:\n"
-        f"{TESSERACT_PATH}\n\n"
-        "O Tesseract é a 'lupa' necessária para ler as imagens dos PDFs offline.\n"
-        "Deseja baixar o instalador oficial agora?"
+        "O Tesseract OCR não está instalado ou não foi encontrado.\n\n"
+        f"Seu Windows foi detectado como versão {major}.{minor}.\n"
+        f"Será baixada a versão Tesseract {versao_label}.\n\n"
+        "Deseja baixar e instalar agora?"
     )
     if messagebox.askyesno("Tesseract OCR Ausente", msg):
-        print("Iniciando o download do instalador. Por favor, aguarde...")
+        url = _get_tesseract_url()
+        print(f"Baixando de: {url}")
+        print("Por favor, aguarde...")
         try:
             exe_path = os.path.join(os.environ['TEMP'], 'tesseract_setup.exe')
-            urllib.request.urlretrieve(TESSERACT_URL, exe_path)
+            urllib.request.urlretrieve(url, exe_path)
             print("Download concluído! Iniciando a instalação...")
-            messagebox.showinfo("Instalação", "Siga os passos do instalador que acabou de abrir na sua tela. APÓS CONCLUIR A INSTALAÇÃO, inicie este script novamente.")
-            # Inicia o instalador
+            messagebox.showinfo(
+                "Instalação",
+                "Siga os passos do instalador que vai abrir.\n"
+                "APÓS CONCLUIR A INSTALAÇÃO, inicie este script novamente."
+            )
             subprocess.Popen([exe_path])
         except Exception as e:
-            messagebox.showerror("Erro de Download", f"Não foi possível baixar automaticamente.\nErro: {e}\n\nBaixe manualmente pesquisando por 'Tesseract UB Mannheim'.")
+            messagebox.showerror(
+                "Erro de Download",
+                f"Não foi possível baixar automaticamente.\nErro: {e}\n\n"
+                "Baixe manualmente em: github.com/UB-Mannheim/tesseract/wiki"
+            )
     return False
 
 def gerar_regex_mes(mes_alvo):
