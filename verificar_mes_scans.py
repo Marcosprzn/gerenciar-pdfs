@@ -31,7 +31,8 @@ def _get_tesseract_url():
     # Windows 10/11 -> major=10
     if major < 10:
         print(f"[INFO] Windows {major}.{minor} detectado - baixando Tesseract 3.05 (compatível com Win 7/8)")
-        return "https://digi.bib.uni-mannheim.de/tesseract/tesseract-ocr-setup-3.05.02.exe"
+        # Usando GitHub Releases que permite download direto
+        return "https://github.com/UB-Mannheim/tesseract/releases/download/v3.05.02/tesseract-ocr-setup-3.05.02.exe"
     else:
         print(f"[INFO] Windows {major}.{minor} detectado - baixando Tesseract 5 (versão atual)")
         return "https://github.com/UB-Mannheim/tesseract/releases/download/v5.5.0/tesseract-ocr-w64-setup-5.5.0.20241111.exe"
@@ -73,10 +74,15 @@ def check_tesseract():
             )
             subprocess.Popen([exe_path])
         except Exception as e:
-            messagebox.showerror(
-                "Erro de Download",
-                f"Não foi possível baixar automaticamente.\nErro: {e}\n\n"
-                "Baixe manualmente em: github.com/UB-Mannheim/tesseract/wiki"
+            url_manual = _get_tesseract_url()
+            import webbrowser
+            webbrowser.open(url_manual)
+            messagebox.showinfo(
+                "Download Manual",
+                f"O download automático falhou (Erro: {e}).\n\n"
+                "O instalador está sendo aberto no seu navegador agora.\n"
+                "Clique em 'Salvar arquivo' e instale manualmente.\n\n"
+                "APÓS CONCLUIR A INSTALAÇÃO, inicie este script novamente."
             )
     return False
 
