@@ -9,8 +9,8 @@ import os, sys, re
 import tkinter as tk
 from tkinter import filedialog
 from urllib.parse import unquote
-import xlrd
-from xlutils.copy import copy as xl_copy
+import pythoncom
+import win32com.client
 
 SHEET_NAME = 'FGTS EM ATRASO - PROCESSOS'
 
@@ -26,17 +26,13 @@ def decodificar(texto):
     return texto
 
 def corrigir_xls(caminho):
-    try:
-        wb_rd = xlrd.open_workbook(caminho, formatting_info=True)
-    except Exception:
-        wb_rd = xlrd.open_workbook(caminho)
-
+    import xlrd
+    wb_rd = xlrd.open_workbook(caminho)
     if SHEET_NAME not in wb_rd.sheet_names():
         return 0
-
     sheet = wb_rd.sheet_by_name(SHEET_NAME)
-    correcoes = []
 
+    correcoes = []
     for row in range(sheet.nrows):
         val = str(sheet.cell_value(row, 3))
         if '%' in val:
@@ -47,14 +43,22 @@ def corrigir_xls(caminho):
     if not correcoes:
         return 0
 
-    wb_wt = xl_copy(wb_rd)
-    ws = wb_wt.get_sheet(wb_rd.sheet_names().index(SHEET_NAME))
+    pythoncom.CoInitialize()
+    xl = win32com.client.Dispatch('Excel.Application')
+    try:
+        xl.Application.DisplayAlerts = False
+        xl.Visible = False
+        abs_path = os.path.abspath(caminho)
+        wb = xl.Workbooks.Open(abs_path)
+        ws = wb.Sheets(SHEET_NAME)
+        for idx, antigo, novo in correcoes:
+            ws.Cells(idx + 1, 4).Value = novo
+            print(f"    L{idx+1}: {antigo[:60]:60s} -> {novo}")
+        wb.Close(SaveChanges=True)
+    finally:
+        xl.Quit()
+        pythoncom.CoUninitialize()
 
-    for idx, antigo, novo in correcoes:
-        ws.write(idx, 3, novo)
-        print(f"    L{idx+1}: {antigo[:60]:60s} -> {novo}")
-
-    wb_wt.save(caminho)
     return len(correcoes)
 
 def corrigir_ods(caminho):
