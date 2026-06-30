@@ -364,7 +364,14 @@ def abrir_pdf():
 def analisar():
     if not _state['pasta_raiz']:
         return jsonify({'ok': False, 'erro': 'Selecione a pasta raiz primeiro'})
-    if not _state['nomes_ref']:
+
+    # SEMPRE recarrega as pastas de referencia do disco
+    nomes_ref = []
+    for p in _state['pastas_ref']:
+        nomes_ref.extend(n for n in ler_nomes_pasta_ref(p) if n not in nomes_ref)
+    _state['nomes_ref'] = nomes_ref
+
+    if not nomes_ref:
         return jsonify({'ok': False, 'erro': 'Carregue a pasta de referência primeiro'})
 
     ignorar_acentos = request.json.get('ignorar_acentos', False)
