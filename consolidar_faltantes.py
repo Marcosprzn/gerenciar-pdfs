@@ -39,7 +39,7 @@ for item in sorted(os.listdir(pasta_raiz)):
         caminho_sub = os.path.join(caminho_ano, sub)
         if not os.path.isdir(caminho_sub):
             continue
-        if 'CONFERIDOS' in sub.upper() or 'CONFERIDO' in sub.upper():
+        if 'CONFERIDOS' in sub.upper() or 'CONFERIDO' in sub.upper() or 'CONFERENCIA' in sub.upper():
             for f in sorted(os.listdir(caminho_sub)):
                 if f.lower().endswith('.xlsx'):
                     arquivos.append(os.path.join(caminho_sub, f))
@@ -55,26 +55,6 @@ print()
 
 falta_pdf = []
 falta_excel = []
-
-for arq in sorted(arquivos):
-    nome = os.path.basename(arq)
-    m = re.search(r"(?<!\d)(\d{2})[-_ ](\d{2,4})(?!\d)", nome)
-    mes_ano = None
-    if m:
-        mes = m.group(1)
-        ano = "20" + m.group(2) if len(m.group(2)) == 2 else m.group(2)
-        mes_ano = f"{mes}/{ano}"
-
-    try:
-        df = pd.read_excel(arq, sheet_name='Dados')
-    except Exception:
-        try:
-            df = pd.read_excel(arq)
-        except Exception as e:
-            print(f"  ERRO ao ler {nome}: {e}")
-            continue
-
-import unicodedata
 
 def normalizar_status(s):
     """Remove acentos e pontuacao para comparar status."""
@@ -153,13 +133,6 @@ falta_excel.sort(key=lambda x: (chave_mes(x), x['nome_pdf']))
 
 # Cria planilha
 from collections import Counter
-import unicodedata
-
-def normalizar_status(s):
-    """Remove acentos e pontuacao para comparar status."""
-    s = unicodedata.normalize('NFKD', str(s))
-    s = ''.join(c for c in s if not unicodedata.combining(c))
-    return s.upper().replace('.', '').replace(',', '').strip()
 pessoas_count = Counter(item['nome'] for item in falta_pdf)
 
 caminho_saida = os.path.join(pasta_raiz, 'consolidado_faltantes.xlsx')
