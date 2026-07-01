@@ -125,6 +125,17 @@ for arq in sorted(arquivos):
         print(f"  Coluna nao encontrada em {nome}")
         continue
 
+    # Primeira passada: descobre quem foi encontrado neste arquivo
+    encontrados_no_arquivo = set()
+    for _, row in df.iterrows():
+        status_raw = str(row[col_status])
+        status = normalizar_status(status_raw)
+        nome_pessoa = str(row.get(col_nome or 'NOMES', ''))
+        if 'ENCONTRADO' in status and not 'NAO ENCONTRADO' in status:
+            if nome_pessoa and nome_pessoa not in ('', 'nan', 'None'):
+                encontrados_no_arquivo.add(nome_pessoa.upper())
+
+    # Segunda passada: coleta faltantes
     for _, row in df.iterrows():
         status_raw = str(row[col_status])
         status = normalizar_status(status_raw)
@@ -133,12 +144,14 @@ for arq in sorted(arquivos):
 
         if 'NAO ENCONTRADO' in status:
             if nome_pessoa and nome_pessoa not in ('', 'nan', 'None'):
-                falta_pdf.append({
-                    'mes': mes_ano or nome,
-                    'nome': nome_pessoa,
-                    'proc': str(row.get('PROC.', str(row.get('Processo', str(row.get('PROC', '')))))),
-                    'pis': str(row.get('PIS', '')),
-                })
+                # So adiciona se a pessoa NAO foi encontrada em nenhuma outra linha deste arquivo
+                if nome_pessoa.upper() not in encontrados_no_arquivo:
+                    falta_pdf.append({
+                        'mes': mes_ano or nome,
+                        'nome': nome_pessoa,
+                        'proc': str(row.get('PROC.', str(row.get('Processo', str(row.get('PROC', '')))))),
+                        'pis': str(row.get('PIS', '')),
+                    })
         elif 'PDF NA PASTA' in status.upper():
             if nome_pdf and nome_pdf not in ('', 'nan', 'None') and not ignorar_falta_excel(nome_pdf):
                 falta_excel.append({
