@@ -131,7 +131,7 @@ for arq in sorted(arquivos):
         status_raw = str(row[col_status])
         status = normalizar_status(status_raw)
         nome_pessoa = str(row.get(col_nome or 'NOMES', ''))
-        if 'ENCONTRADO' in status and not 'NAO ENCONTRADO' in status:
+        if status.startswith('ENCONTRADO'):
             if nome_pessoa and nome_pessoa not in ('', 'nan', 'None'):
                 encontrados_no_arquivo.add(nome_pessoa.upper())
 
