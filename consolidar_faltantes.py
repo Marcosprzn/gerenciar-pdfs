@@ -14,6 +14,34 @@ import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
 
+# Nomes de arquivo a ignorar na aba "Falta no Excel"
+EXCLUIR_FALTA_EXCEL = [
+    re.compile(r'^IMG_\d+', re.IGNORECASE),
+    re.compile(r'^img_\d+', re.IGNORECASE),
+    re.compile(r'ARQUIVO\s+FGTS', re.IGNORECASE),
+    re.compile(r'^ARQUIVO\s', re.IGNORECASE),
+    re.compile(r'\bSEFIP\b', re.IGNORECASE),
+    re.compile(r'\bGRRF\b', re.IGNORECASE),
+    re.compile(r'\bDEPOSITADO\b', re.IGNORECASE),
+    re.compile(r'\bCOMPROVANTE\b', re.IGNORECASE),
+    re.compile(r'\bRECIBO\b', re.IGNORECASE),
+    re.compile(r'\bEXTRATO\b', re.IGNORECASE),
+    re.compile(r'\bRELATORIO\b', re.IGNORECASE),
+    re.compile(r'\bGUIA\b', re.IGNORECASE),
+    re.compile(r'\bGPS\b', re.IGNORECASE),
+    re.compile(r'\bGFIP\b', re.IGNORECASE),
+    re.compile(r'\bPROTOCOLO\b', re.IGNORECASE),
+    re.compile(r'\bCOMPENSAÇÃ¦O\b', re.IGNORECASE),
+    re.compile(r'\bDECLARAÇÃ£O\b', re.IGNORECASE),
+]
+
+def ignorar_falta_excel(nome_pdf):
+    """Retorna True se o nome do PDF deve ser ignorado em Falta no Excel."""
+    for padrao in EXCLUIR_FALTA_EXCEL:
+        if padrao.search(nome_pdf):
+            return True
+    return False
+
 root = tk.Tk()
 root.withdraw()
 root.attributes('-topmost', True)
@@ -112,7 +140,7 @@ for arq in sorted(arquivos):
                     'pis': str(row.get('PIS', '')),
                 })
         elif 'PDF NA PASTA' in status.upper():
-            if nome_pdf and nome_pdf not in ('', 'nan', 'None'):
+            if nome_pdf and nome_pdf not in ('', 'nan', 'None') and not ignorar_falta_excel(nome_pdf):
                 falta_excel.append({
                     'mes': mes_ano or nome,
                     'nome_pdf': nome_pdf,
