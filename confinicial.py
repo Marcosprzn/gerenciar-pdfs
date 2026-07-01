@@ -234,6 +234,12 @@ def ler_planilha_fgts(caminho_arquivo):
     for i in range(len(df_raw)):
         linha = df_raw.iloc[i]
         val_nome = linha[idx_nomes]
+        
+        # Ignora linhas de total (ex: "T O T A I S", "TOTAL GERAL")
+        val_col0 = str(linha[0]).strip().upper() if pd.notna(linha[0]) else ''
+        if re.search(r'T\s*O\s*T\s*(A\s*I\s*S|A\s*L)', val_col0):
+            continue
+
         eh_nome = e_um_nome_valido(val_nome)
 
         if eh_nome:

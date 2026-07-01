@@ -306,6 +306,9 @@ def ler_planilha(caminho):
     gaps = 0
     for i in range(len(df)):
         nome = df.iloc[i, 3]
+        col0 = str(df.iloc[i, 0]).strip().upper() if pd.notna(df.iloc[i, 0]) else ''
+        if re.search(r'T\s*O\s*T\s*(A\s*I\s*S|A\s*L)', col0):
+            continue
         if eh_nome_valido(nome):
             achou = True; gaps = 0
             dados.append({"PROC.": df.iloc[i, 1], "PIS": df.iloc[i, 2],
