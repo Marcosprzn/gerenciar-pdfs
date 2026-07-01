@@ -155,19 +155,10 @@ def verificar_abreviacao(a, b):
         else: i += 1; j += 1
     return mc >= max(len(ta), len(tb)) - 1
 
-def listar_com_refresh(pasta):
-    """Lista diretorio forçando refresh do cache SMB (pastas de rede)."""
-    if not pasta or not os.path.isdir(pasta):
-        return []
-    # Primeira listagem (pode vir do cache)
-    _ = list(os.listdir(pasta))
-    # Segunda listagem (força refresh no servidor)
-    return sorted(os.listdir(pasta))
-
 def ler_nomes_pasta_ref(pasta):
     nomes = []
     if not pasta or not os.path.isdir(pasta): return nomes
-    for f in listar_com_refresh(pasta):
+    for f in sorted(os.listdir(pasta)):
         if not eh_pdf_valido(f): continue
         stem, _ = extrair_variante(os.path.splitext(f)[0])
         if eh_homonimo(stem): continue
@@ -179,10 +170,10 @@ def ler_nomes_pasta_ref(pasta):
 def buscar_todos_pdfs(pasta_raiz):
     result = []
     if not pasta_raiz or not os.path.isdir(pasta_raiz): return result
-    for d in listar_com_refresh(pasta_raiz):
+    for d in sorted(os.listdir(pasta_raiz)):
         cp = os.path.join(pasta_raiz, d)
         if not os.path.isdir(cp): continue
-        for f in listar_com_refresh(cp):
+        for f in sorted(os.listdir(cp)):
             if not eh_pdf_valido(f): continue
             stem, var = extrair_variante(os.path.splitext(f)[0])
             result.append({
