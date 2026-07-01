@@ -249,7 +249,6 @@ def ler_planilha_fgts(caminho_arquivo):
             val_pis = linha[idx_pis]
             # Se a coluna do PIS estiver vazia, procura nas colunas anteriores (deslocamento de célula)
             if pd.isna(val_pis) or str(val_pis).strip() in ('', '-', '0'):
-                import re
                 for col_idx in range(idx_nomes):
                     c_val = linha[col_idx]
                     if pd.notna(c_val):
