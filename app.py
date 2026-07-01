@@ -565,12 +565,15 @@ def normalizar_pis(valor):
 
 @app.route('/api/carregar-planilhas', methods=['POST'])
 def carregar_planilhas():
-    root = tk.Tk(); root.withdraw(); root.attributes('-topmost', True)
-    caminhos = filedialog.askopenfilenames(
-        title="Selecione as Planilhas FGTS",
-        filetypes=[("Planilhas", "*.xlsx *.xls *.ods"), ("Todos", "*.*")]
-    )
-    root.destroy()
+    try:
+        root = tk.Tk(); root.withdraw(); root.attributes('-topmost', True); root.update()
+        caminhos = filedialog.askopenfilenames(
+            title="Selecione as Planilhas FGTS",
+            filetypes=[("Planilhas", "*.xlsx *.xls *.ods"), ("Todos", "*.*")]
+        )
+        root.destroy()
+    except Exception as e:
+        return jsonify({'ok': False, 'erro': f'Erro ao abrir seletor de arquivos: {str(e)}'})
     
     if not caminhos:
         return jsonify({'ok': False, 'erro': 'Nenhum arquivo selecionado'})
