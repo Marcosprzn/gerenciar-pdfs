@@ -91,7 +91,7 @@ EXCLUIR_PADROES = [
     'ARQUIVO SEFIP', 'SEFIP', 'GRRF', 'DEPOSITADO', 'COMPROVANTE',
     'RECIBO', 'EXTRATO', 'FOLHA', 'RELATORIO', 'GUIA', 'GPS', 'GFIP',
     'PROTOCOLO', 'COMPENSACAO', 'DECLARACAO',
-    'ARQUIVO FGTS', 'IMG_', 'Thumbs',
+    'ARQUIVO FGTS', 'ARQUIVO FGST', 'IMG_', 'Thumbs',
 ]
 CONECTORES = {'DE', 'DA', 'DO', 'DOS', 'DAS'}
 RE_VARIANTE = re.compile(r'(REC\s*\.?\s*\d+|\b115\b)', re.IGNORECASE)

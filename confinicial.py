@@ -286,7 +286,7 @@ def verificar_pdfs(df, pasta_pdfs):
         'COMPROVANTE', 'RECIBO', 'EXTRATO', 'FOLHA',
         'RELATORIO', 'GUIA', 'GPS', 'GFIP',
         'PROTOCOLO', 'COMPENSACAO', 'DECLARACAO',
-        'ARQUIVO FGTS', 'IMG_', 'Thumbs',
+        'ARQUIVO FGTS', 'ARQUIVO FGST', 'IMG_', 'Thumbs',
     ]
 
     arquivos_excluidos = []

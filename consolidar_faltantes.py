@@ -19,6 +19,7 @@ EXCLUIR_FALTA_EXCEL = [
     re.compile(r'^IMG_\d+', re.IGNORECASE),
     re.compile(r'^img_\d+', re.IGNORECASE),
     re.compile(r'ARQUIVO\s+FGTS', re.IGNORECASE),
+    re.compile(r'ARQUIVO\s+FGST', re.IGNORECASE),
     re.compile(r'^ARQUIVO\s', re.IGNORECASE),
     re.compile(r'\bSEFIP\b', re.IGNORECASE),
     re.compile(r'\bGRRF\b', re.IGNORECASE),
