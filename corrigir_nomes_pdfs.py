@@ -14,6 +14,7 @@ EXCLUIR_PADROES = [
     'COMPROVANTE', 'RECIBO', 'EXTRATO', 'FOLHA',
     'RELATORIO', 'GUIA', 'GPS', 'GFIP',
     'PROTOCOLO', 'COMPENSACAO', 'DECLARACAO',
+    'ARQUIVO FGTS', 'IMG_', 'Thumbs',
 ]
 import tkinter as tk
 from tkinter import filedialog

@@ -284,8 +284,9 @@ def verificar_pdfs(df, pasta_pdfs):
     EXCLUIR_PADROES = [
         'ARQUIVO SEFIP', 'SEFIP', 'GRRF', 'DEPOSITADO',
         'COMPROVANTE', 'RECIBO', 'EXTRATO', 'FOLHA',
-        'RELATORIO', 'GUIA', 'GPS', 'GFIP', 'SEFIP',
+        'RELATORIO', 'GUIA', 'GPS', 'GFIP',
         'PROTOCOLO', 'COMPENSACAO', 'DECLARACAO',
+        'ARQUIVO FGTS', 'IMG_', 'Thumbs',
     ]
 
     arquivos_excluidos = []
