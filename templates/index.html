@@ -1149,7 +1149,9 @@ async function carregarPlanilhas() {
   const r = await post('/api/carregar-planilhas', {});
   if (r.ok) {
     if (r.erros && r.erros.length > 0) {
-      toast(`Carregadas: ${r.sucessos}. Erros: ${r.erros.length}`, 'error');
+      let msg = `Carregadas: ${r.sucessos}. Erros (${r.erros.length}):\n`;
+      r.erros.forEach(e => msg += `  • ${e}\n`);
+      toast(msg, 'error');
     } else {
       toast(`${r.sucessos} planilhas carregadas!`, 'success');
     }
