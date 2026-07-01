@@ -242,25 +242,27 @@ def encontrar_match_ref(nome_norm, nome_stem, nomes_ref, ignorar_acentos=False):
 
 def abrir_pasta():
     try:
-        import tkinter as tk
-        from tkinter import filedialog
-        root = tk.Tk(); root.withdraw(); root.attributes('-topmost', True); root.update()
+        dlg = tk.Tk()
+        dlg.withdraw()
+        dlg.attributes('-topmost', True)
+        dlg.update()
         p = filedialog.askdirectory(title='Selecione uma pasta')
-        root.destroy()
+        dlg.destroy()
         return p or ''
     except Exception:
         return ''
 
 def abrir_arquivos():
     try:
-        import tkinter as tk
-        from tkinter import filedialog
-        root = tk.Tk(); root.withdraw(); root.attributes('-topmost', True); root.update()
+        dlg = tk.Tk()
+        dlg.withdraw()
+        dlg.attributes('-topmost', True)
+        dlg.update()
         files = filedialog.askopenfilenames(
             title='Selecione planilhas',
             filetypes=[('Planilhas', '*.xls *.xlsx *.ods')]
         )
-        root.destroy()
+        dlg.destroy()
         return list(files)
     except Exception:
         return []
@@ -566,12 +568,12 @@ def normalizar_pis(valor):
 @app.route('/api/carregar-planilhas', methods=['POST'])
 def carregar_planilhas():
     try:
-        root = tk.Tk(); root.withdraw(); root.attributes('-topmost', True); root.update()
+        dlg = tk.Tk(); dlg.withdraw(); dlg.attributes('-topmost', True); dlg.update()
         caminhos = filedialog.askopenfilenames(
             title="Selecione as Planilhas FGTS",
             filetypes=[("Planilhas", "*.xlsx *.xls *.ods"), ("Todos", "*.*")]
         )
-        root.destroy()
+        dlg.destroy()
     except Exception as e:
         return jsonify({'ok': False, 'erro': f'Erro ao abrir seletor de arquivos: {str(e)}'})
     
