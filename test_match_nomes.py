@@ -13,13 +13,14 @@ CASOS = [
     ("Maria Aparecida Silva", "Maria A Silva",          "ABREVIACAO"), # meio abreviado (inicial)
     ("Luiz Gonzaga Lima",     "Luis Gonzaga Lima",       "ABREVIACAO"), # 1 erro de digitacao Luiz/Luis
     ("Joao Paulo Santos",     "J P Santos",              "ABREVIACAO"), # iniciais
-    ("Maria Aparecida Silva", "Maria Silva",             "ABREVIACAO"), # meio ausente
     # "COD 115" / rotulo de grupo nao faz parte do nome -> mesma pessoa
     ("Jose Carlos dos Santos", "Jose Carlos dos Santos COD 115", "IGUAL"),
 
     # --- ambiguos, devem exigir revisao (DUVIDA) ---
     # Prefixo de 4+ letras no meio -> pode ser abreviatura -> revisao.
     ("Maria Aparecida Silva", "Maria Apar Silva",       "DUVIDA"),   # meio truncado (prefixo)
+    ("Maria Aparecida Silva", "Maria Silva",            "DUVIDA"),   # nome do meio inteiro so de um lado
+    ("Jose Severino da Silva","Jose Severino Sales da Silva","DUVIDA"),# sobrenome inteiro a mais no meio
     ("Jose Prazeres",         "Jose Prazeres Vieira",    "DUVIDA"),   # sobrenome extra no fim
     ("Antonio Carlos",        "Antonio Carlos de Jesus", "DUVIDA"),   # sobrenome extra no fim
     ("Maria Silva",           "Maria Silva Santos",      "DUVIDA"),   # sobrenome extra no fim

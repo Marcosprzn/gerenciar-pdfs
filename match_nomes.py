@@ -76,8 +76,10 @@ def _todos_casam(menor, maior):
     return True, casados
 
 
-def _nao_casados(menor, maior):
-    """Tokens de `menor` que NAO acharam par (via _token_match) em `maior`."""
+def _alinhar(menor, maior):
+    """Casa cada token de `menor` com um de `maior` (greedy, via _token_match).
+    Retorna (faltantes, sobras): tokens de `menor` sem par e tokens de `maior`
+    que sobraram (nao usados)."""
     usados = [False] * len(maior)
     faltantes = []
     for tm in menor:
@@ -87,7 +89,8 @@ def _nao_casados(menor, maior):
                 break
         else:
             faltantes.append(tm)
-    return faltantes
+    sobras = [maior[i] for i in range(len(maior)) if not usados[i]]
+    return faltantes, sobras
 
 
 def _relacionado(a, b):
@@ -143,20 +146,24 @@ def comparar_nomes(nome_planilha, nome_pdf):
 
     if ultimo_ok:
         # Mesmo primeiro nome e mesmo ultimo sobrenome, mas NAO identicos.
-        faltantes = _nao_casados(menor, maior)
-        if not faltantes:
-            # Todo o lado menor casou: diferenca e so inicial/abreviatura/
-            # nome do meio ausente -> mesma pessoa.
-            return ("ABREVIACAO", score)
-        # Ha nome(s) do meio sem par. Distingue:
-        #   - abreviatura/truncamento (compartilha prefixo) -> DUVIDA (revisar)
-        #     ex.: MARIA APAR SILVA x MARIA APARECIDA SILVA
-        #   - nome do meio COMPLETAMENTE diferente -> outra pessoa
-        #     ex.: LUIZ PEDRO DA SILVA x LUIZ PEREIRA DA SILVA
-        #          JOSE CARLOS ... SANTOS x JOSE MARTILIANO ... SANTOS
-        if all(_relacionado_a_algum(t, maior) for t in faltantes):
+        faltantes, sobras = _alinhar(menor, maior)
+        if faltantes:
+            # Nome(s) do meio do lado menor sem par:
+            #   - abreviatura/truncamento (compartilha prefixo) -> DUVIDA (revisar)
+            #     ex.: MARIA APAR SILVA x MARIA APARECIDA SILVA
+            #   - nome COMPLETAMENTE diferente -> outra pessoa
+            #     ex.: LUIZ PEDRO DA SILVA x LUIZ PEREIRA DA SILVA
+            if all(_relacionado_a_algum(t, maior) for t in faltantes):
+                return ("DUVIDA", score)
+            return ("DIFERENTE", score)
+        # Todo o lado menor casou. Olha os tokens EXTRAS do lado maior:
+        #   - so iniciais/curtos (<=3 letras) -> abreviatura -> mesma pessoa
+        #     ex.: MARIA A SILVA x MARIA APARECIDA SILVA
+        #   - um NOME INTEIRO (>=4) presente so de um lado -> ambiguo, revisar
+        #     ex.: JOSE SEVERINO DA SILVA x JOSE SEVERINO SALES DA SILVA
+        if any(len(t) >= 4 for t in sobras):
             return ("DUVIDA", score)
-        return ("DIFERENTE", score)
+        return ("ABREVIACAO", score)
 
     # Ultimo sobrenome difere.
     # Caso "sobrenome extra no fim": o ultimo do menor casa com o penultimo do
