@@ -183,6 +183,8 @@ for arq in sorted(arquivos):
             continue
         if n_pessoa.lower() in ('', 'nan', 'none'):    # linha sem nome -> ignora
             continue
+        if 'DUPLICADO' in st:                          # duplicata na planilha -> nao conta
+            continue
         g_excel += 1                                   # pessoa da planilha
         if 'NAO ENCONTRADO' in st:
             g_nao += 1

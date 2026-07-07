@@ -716,6 +716,7 @@ def analisar_conciliacao():
     def _status_base(s):
         for prefixo in [
             "NÃO ENCONTRADO NO .PDF",
+            "DUPLICADO NA PLANILHA",
             "POSSÍVEL ERRO NOMINAL",
             "ENCONTRADO VIA LLM",
             "ENCONTRADO COMO 115",
@@ -775,6 +776,10 @@ def analisar_conciliacao():
                 erros_nominais.append({'pis': pis, 'nome_planilha': nome_planilha, 'nome_pdf': nome_pdf})
             elif status == 'NÃO ENCONTRADO NO .PDF':
                 nao_encontrados.append({'pis': pis, 'nome_planilha': nome_planilha, 'proc': proc})
+            elif status == 'DUPLICADO NA PLANILHA':
+                # Mesma pessoa (mesmo PIS) digitada 2x na planilha; ja conferida
+                # na outra linha. Nao e PDF faltando.
+                encontrados.append({'pis': pis, 'nome_planilha': nome_planilha, 'nome_pdf': '(duplicado na planilha)', 'proc': proc, 'detalhe': 'DUPLICADO NA PLANILHA'})
             elif status == 'PDF NA PASTA, MAS NÃO NA PLANILHA':
                 pdfs_extras.append({'nome_pdf': nome_pdf})
             elif status in ['ENCONTRADO', 'ENCONTRADO COMO 115', 'ENCONTRADO VIA LLM']:

@@ -411,6 +411,24 @@ def verificar_pdfs(df, pasta_pdfs):
                 status_lista[idx] = "NÃO ENCONTRADO NO .PDF"
                 arquivo_encontrado_lista[idx] = ""
 
+    # Pos-processamento: linha duplicada na planilha (mesmo PIS de alguem que
+    # JA recebeu PDF) nao e "faltando PDF" -> marca como DUPLICADO. Ex.: a mesma
+    # pessoa foi digitada 2x na planilha, mas existe 1 unico PDF dela.
+    def _pis_digitos(v):
+        return ''.join(c for c in str(v) if c.isdigit()).lstrip('0')
+    pis_lista = list(df['PIS']) if 'PIS' in df.columns else [''] * len(df)
+    pis_com_pdf = set()
+    for i in range(len(status_lista)):
+        if arquivo_encontrado_lista[i]:
+            p = _pis_digitos(pis_lista[i]) if i < len(pis_lista) else ''
+            if p:
+                pis_com_pdf.add(p)
+    for i in range(len(status_lista)):
+        if status_lista[i] == "NÃO ENCONTRADO NO .PDF":
+            p = _pis_digitos(pis_lista[i]) if i < len(pis_lista) else ''
+            if p and p in pis_com_pdf:
+                status_lista[i] = "DUPLICADO NA PLANILHA"
+
     df['Status PDF'] = status_lista
     df['Nome do Arquivo Encontrado'] = arquivo_encontrado_lista
 
