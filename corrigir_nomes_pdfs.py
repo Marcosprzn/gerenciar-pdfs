@@ -30,35 +30,14 @@ USAR_LLM = False
 # FUNCOES DE MATCHING (iguais ao confinicial.py)
 # ============================================================
 
-def normalizar_texto(texto):
-    if not isinstance(texto, str): return ""
-    nfkd = unicodedata.normalize('NFKD', texto)
-    texto_sem_acento = "".join([c for c in nfkd if not unicodedata.combining(c)])
-    texto_upper = texto_sem_acento.upper()
-    texto_sem_ponto = texto_upper.replace('.', '').replace('(', '').replace(')', '')
-    texto_sem_hifen = texto_sem_ponto.replace('-', ' ').replace('_', ' ')
-    return " ".join(texto_sem_hifen.split())
+# normalizar_texto / levenshtein / calcular_similaridade vem de utils.py (compartilhado)
+from utils import normalizar_texto, levenshtein, calcular_similaridade
 
 def eh_pdf_valido(nome_arquivo):
     if not nome_arquivo.lower().endswith(EXT):
         return False
     nome_sem_ext = os.path.splitext(nome_arquivo)[0].upper()
     return not any(p in nome_sem_ext for p in EXCLUIR_PADROES)
-
-def calcular_similaridade(a, b):
-    return SequenceMatcher(None, a, b).ratio()
-
-def levenshtein(a, b):
-    m, n = len(a), len(b)
-    dp = list(range(n + 1))
-    for i in range(1, m + 1):
-        prev = dp[0]
-        dp[0] = i
-        for j in range(1, n + 1):
-            temp = dp[j]
-            dp[j] = min(dp[j] + 1, dp[j - 1] + 1, prev + (0 if a[i - 1] == b[j - 1] else 1))
-            prev = temp
-    return dp[n]
 
 def verificar_abreviacao(nome_planilha, nome_pdf):
     conectores = ['DE', 'DA', 'DO', 'DOS', 'DAS']

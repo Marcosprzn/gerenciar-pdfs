@@ -1,4 +1,22 @@
+# Dependencias do Gerenciador de PDFs
+# Instale tudo com:  pip install -r requirements.txt
+
+# --- Nucleo (web app e planilhas) ---
 flask
 watchdog
 pandas
-openpyxl
+openpyxl>=3.0
+xlrd            # leitura de .xls antigo
+odfpy           # leitura de .ods (LibreOffice/OpenOffice)
+
+# --- PDF e OCR ---
+PyMuPDF         # importado como "fitz" — leitura/renderizacao de PDF
+pytesseract     # OCR (requer o binario Tesseract instalado no sistema)
+Pillow          # importado como "PIL" — manipulacao de imagem para OCR
+
+# --- Opcional: verificacao de nomes com IA (Gemini) ---
+# So e necessario se USAR_LLM estiver ativo e houver chave configurada.
+google-genai
+
+# OBS: tkinter e stdlib do Python (nao instala via pip; ja vem no
+# instalador oficial do Python para Windows).

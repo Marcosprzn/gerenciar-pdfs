@@ -25,6 +25,22 @@ import math
 app = Flask(__name__)
 app.secret_key = 'gerenciador_pdfs_2024'
 
+# ─── Logging ───────────────────────────────────────────────────────────
+# Erros vao para o console E para o arquivo app.log (rotativo, 3 x 1 MB),
+# em vez de sumirem silenciosamente. Consulte app.log quando algo falhar.
+import logging
+from logging.handlers import RotatingFileHandler
+_LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'app.log')
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        RotatingFileHandler(_LOG_FILE, maxBytes=1_000_000, backupCount=3, encoding='utf-8'),
+        logging.StreamHandler(),
+    ],
+)
+log = logging.getLogger('gerenciador_pdfs')
+
 # ─── Estado global (app local, single-user) ────────────────────────────
 _state = {
     'pasta_raiz': '',
@@ -43,15 +59,15 @@ def load_historico():
             with open(HISTORICO_FILE, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except Exception:
-            pass
+            log.exception("Falha ao ler o historico (%s)", HISTORICO_FILE)
     return []
 
 def save_historico(h):
     try:
         with open(HISTORICO_FILE, 'w', encoding='utf-8') as f:
             json.dump(h, f, indent=2, ensure_ascii=False)
-    except Exception as e:
-        print(f"Erro salvando histórico: {e}")
+    except Exception:
+        log.exception("Falha ao salvar o historico (%s)", HISTORICO_FILE)
 
 def add_historico(acao, arquivo_original, novo_nome, pasta, status, msg=""):
     h = load_historico()
@@ -97,25 +113,8 @@ CONECTORES = {'DE', 'DA', 'DO', 'DOS', 'DAS'}
 RE_VARIANTE = re.compile(r'(REC\s*\.?\s*\d+|\b115\b)', re.IGNORECASE)
 
 # ─── Utilitárias ───────────────────────────────────────────────────────
-def normalizar(t):
-    if not isinstance(t, str): return ''
-    s = unicodedata.normalize('NFKD', t)
-    s = ''.join(c for c in s if not unicodedata.combining(c)).upper()
-    return ' '.join(s.replace('.', '').replace('-', ' ').replace('_', ' ').replace('(', '').replace(')', '').split())
-
-def similaridade(a, b):
-    return SequenceMatcher(None, a, b).ratio()
-
-def levenshtein(a, b):
-    m, n = len(a), len(b)
-    dp = list(range(n + 1))
-    for i in range(1, m + 1):
-        prev = dp[0]; dp[0] = i
-        for j in range(1, n + 1):
-            temp = dp[j]
-            dp[j] = min(dp[j] + 1, dp[j - 1] + 1, prev + (0 if a[i - 1] == b[j - 1] else 1))
-            prev = temp
-    return dp[n]
+# normalizar / similaridade / levenshtein agora vivem em utils.py (compartilhado)
+from utils import normalizar, similaridade, levenshtein
 
 def extrair_variante(nome):
     m = RE_VARIANTE.search(nome)

@@ -99,15 +99,10 @@ def selecionar_pasta_salvamento():
     root.destroy()
     return pasta
 
-def normalizar_texto(texto):
-    if not isinstance(texto, str): return ""
-    nfkd = unicodedata.normalize('NFKD', texto)
-    texto_sem_acento = "".join([c for c in nfkd if not unicodedata.combining(c)])
-    texto_upper = texto_sem_acento.upper()
-    texto_sem_ponto = texto_upper.replace('.', '').replace('(', '').replace(')', '')
-    texto_sem_hifen = texto_sem_ponto.replace('-', ' ').replace('_', ' ')
-    texto_limpo = " ".join(texto_sem_hifen.split())
-    return texto_limpo
+# normalizar_texto / levenshtein / calcular_similaridade vem de utils.py (compartilhado)
+from utils import normalizar_texto, levenshtein, calcular_similaridade
+# comparar_nomes: matcher de nomes por tokens (ver match_nomes.py e test_match_nomes.py)
+from match_nomes import comparar_nomes
 
 RE_VARIANTE = re.compile(r'(REC\s*\.?\s*\d+|\b115\b)', re.IGNORECASE)
 
@@ -123,21 +118,6 @@ def extrair_variante(nome_sem_ext):
         stem = nome_sem_ext[:m.start()].strip() + ' ' + nome_sem_ext[m.end():].strip()
         return stem.strip(), tag
     return nome_sem_ext, None
-
-def calcular_similaridade(a, b):
-    return SequenceMatcher(None, a, b).ratio()
-
-def levenshtein(a, b):
-    m, n = len(a), len(b)
-    dp = list(range(n + 1))
-    for i in range(1, m + 1):
-        prev = dp[0]
-        dp[0] = i
-        for j in range(1, n + 1):
-            temp = dp[j]
-            dp[j] = min(dp[j] + 1, dp[j - 1] + 1, prev + (0 if a[i - 1] == b[j - 1] else 1))
-            prev = temp
-    return dp[n]
 
 def verificar_abreviacao(nome_planilha, nome_pdf):
     conectores = ['DE', 'DA', 'DO', 'DOS', 'DAS']
@@ -319,119 +299,61 @@ def verificar_pdfs(df, pasta_pdfs):
         return [a for a in lista if not a["variante"]]
 
     def _buscar_em_grupo(nome_norm, grupo, usar_llm=False):
-        """Busca nome_norm no grupo de PDFs. Retorna (status, arquivo_obj) ou (None, None)."""
+        """Busca nome_norm no grupo de PDFs usando o matcher por tokens
+        (match_nomes.comparar_nomes). Retorna (status, arquivo_obj) ou (None, None).
+
+        Prioridade:
+          IGUAL      -> ENCONTRADO
+          ABREVIACAO -> ENCONTRADO COM ABREVIAÇÃO
+          DUVIDA     -> POSSÍVEL ERRO NOMINAL (ou LLM decide, se ligado)
+          DIFERENTE  -> ignorado
+        Desempate entre candidatos do mesmo veredicto: maior score, depois
+        tamanho de nome mais proximo.
+        """
         if not grupo:
             return None, None
 
-        # 1. Exata
-        candidatos = []
-        for arq in grupo:
-            if nome_norm in arq["norm"]:
-                candidatos.append(arq)
-        if candidatos:
-            candidatos.sort(key=lambda a: abs(len(a["norm"]) - len(nome_norm)))
-            return "ENCONTRADO", candidatos[0]
+        melhor_igual = melhor_igual_chave = None
+        melhor_abrev = melhor_abrev_chave = None
+        duvidas = []
 
-        # 2. Abreviacao
         for arq in grupo:
-            if verificar_abreviacao(nome_norm, arq["norm"]):
-                ratio = calcular_similaridade(nome_norm, arq["norm"])
-                if ratio < 0.80:
-                    if usar_llm and llm_matcher:
-                        resp = llm_matcher.verificar_com_llm(nome_norm, arq["norm"])
-                        if resp is True:
-                            print(f'    [LLM] {nome_norm} x {arq["norm"]} -> SIM (abreviacao {ratio:.0%})')
-                            return "ENCONTRADO COM ABREVIAÇÃO", arq
-                        elif resp is False:
-                            print(f'    [LLM] {nome_norm} x {arq["norm"]} -> NAO')
-                            continue
-                    return "POSSÍVEL ERRO NOMINAL", arq
-                else:
-                    return "ENCONTRADO COM ABREVIAÇÃO", arq
+            veredicto, score = comparar_nomes(nome_norm, arq["norm"])
+            chave = (score, -abs(len(arq["norm"]) - len(nome_norm)))
+            if veredicto == "IGUAL":
+                if melhor_igual is None or chave > melhor_igual_chave:
+                    melhor_igual, melhor_igual_chave = arq, chave
+            elif veredicto == "ABREVIACAO":
+                if melhor_abrev is None or chave > melhor_abrev_chave:
+                    melhor_abrev, melhor_abrev_chave = arq, chave
+            elif veredicto == "DUVIDA":
+                duvidas.append((score, arq))
 
-        # 3. Similaridade (exige que passe pela abreviacao primeiro)
-        melhor_ratio = 0
-        melhor_arq = None
-        for arq in grupo:
-            if not verificar_abreviacao(nome_norm, arq["norm"]):
-                continue
-            ratio = calcular_similaridade(nome_norm, arq["norm"])
-            if ratio > melhor_ratio:
-                melhor_ratio = ratio
-                melhor_arq = arq
-        if melhor_ratio >= 0.80:
+        if melhor_igual is not None:
+            return "ENCONTRADO", melhor_igual
+        if melhor_abrev is not None:
+            return "ENCONTRADO COM ABREVIAÇÃO", melhor_abrev
+
+        if duvidas:
+            duvidas.sort(key=lambda x: x[0], reverse=True)
             if usar_llm and llm_matcher:
-                resp = llm_matcher.verificar_com_llm(nome_norm, melhor_arq["norm"])
-                if resp is True:
-                    print(f'    [LLM] {nome_norm} x {melhor_arq["norm"]} -> SIM')
-                    return "ENCONTRADO VIA LLM", melhor_arq
-                elif resp is False:
-                    print(f'    [LLM] {nome_norm} x {melhor_arq["norm"]} -> NAO')
-                else:
-                    return "POSSÍVEL ERRO NOMINAL", melhor_arq
-            else:
-                return "POSSÍVEL ERRO NOMINAL", melhor_arq
-
-        # 3b. Similaridade direta (fallback sem abreviacao, com primeiro nome igual)
-        if not melhor_arq:
-            melhor_ratio = 0
-            tokens_nome = [t for t in nome_norm.split() if t not in ('DE','DA','DO','DOS','DAS')]
-            if tokens_nome:
-                for arq in grupo:
-                    tokens_file = [t for t in arq["norm"].split() if t not in ('DE','DA','DO','DOS','DAS')]
-                    if not tokens_file: continue
-                    p1, p2 = tokens_nome[0], tokens_file[0]
-                    if p1 != p2 and not ((len(p1) <= 4 and p2.startswith(p1)) or (len(p2) <= 4 and p1.startswith(p2))):
-                        continue
-                    # Lista menor deve ser subconjunto da maior
-                    if len(tokens_nome) <= len(tokens_file):
-                        menor, maior = tokens_nome, tokens_file
-                    else:
-                        menor, maior = tokens_file, tokens_nome
-                    todos_casam = True
-                    for tm in menor:
-                        casa = any(
-                            tm == tm2 or
-                            (len(tm) <= 4 and tm2.startswith(tm)) or
-                            (len(tm2) <= 4 and tm.startswith(tm2)) or
-                            (len(tm) >= 4 and len(tm2) >= 4 and levenshtein(tm, tm2) <= max(1, min(len(tm), len(tm2)) // 3))
-                            for tm2 in maior
-                        )
-                        if not casa:
-                            todos_casam = False
-                            break
-                    if not todos_casam:
-                        continue
-                    ratio = calcular_similaridade(nome_norm, arq["norm"])
-                    if ratio >= 0.85 and ratio > melhor_ratio:
-                        melhor_ratio = ratio
-                        melhor_arq = arq
-            if melhor_arq:
-                if usar_llm and llm_matcher:
-                    resp = llm_matcher.verificar_com_llm(nome_norm, melhor_arq["norm"])
+                # O LLM arbitra os casos duvidosos, do mais provavel ao menos.
+                indeciso = None
+                for score, arq in duvidas:
+                    resp = llm_matcher.verificar_com_llm(nome_norm, arq["norm"])
                     if resp is True:
-                        print(f'    [LLM] {nome_norm} x {melhor_arq["norm"]} -> SIM')
-                        return "ENCONTRADO VIA LLM", melhor_arq
+                        print(f'    [LLM] {nome_norm} x {arq["norm"]} -> SIM (duvida)')
+                        return "ENCONTRADO VIA LLM", arq
                     elif resp is False:
-                        print(f'    [LLM] {nome_norm} x {melhor_arq["norm"]} -> NAO')
-                    else:
-                        return "POSSÍVEL ERRO NOMINAL", melhor_arq
-                else:
-                    return "POSSÍVEL ERRO NOMINAL", melhor_arq
-                melhor_arq = None
-                melhor_ratio = 0
-            else:
-                return "POSSÍVEL ERRO NOMINAL", melhor_arq
-
-        # 4. LLM fallback: tenta todos os PDFs restantes
-        if usar_llm and llm_matcher:
-            for arq in grupo:
-                resp = llm_matcher.verificar_com_llm(nome_norm, arq["norm"])
-                if resp is True:
-                    print(f'    [LLM] {nome_norm} x {arq["norm"]} -> SIM (fallback)')
-                    return "ENCONTRADO VIA LLM", arq
-                elif resp is False:
-                    print(f'    [LLM] {nome_norm} x {arq["norm"]} -> NAO')
+                        print(f'    [LLM] {nome_norm} x {arq["norm"]} -> NAO')
+                        continue
+                    elif indeciso is None:
+                        indeciso = arq  # LLM em duvida -> guarda para revisao humana
+                if indeciso is not None:
+                    return "POSSÍVEL ERRO NOMINAL", indeciso
+                return None, None
+            # Sem LLM: a duvida mais provavel vai para revisao humana.
+            return "POSSÍVEL ERRO NOMINAL", duvidas[0][1]
 
         return None, None
 

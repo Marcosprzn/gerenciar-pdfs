@@ -1,5 +1,13 @@
 __pycache__/
 *.pyc
+
+# Segredos — NUNCA commitar a chave de API real
+config_llm.py
+historico.json
+
+# Logs de runtime
+app.log
+app.log.*
 .DS_Store
 *.xls
 *.xlsx

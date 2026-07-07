@@ -36,26 +36,8 @@ RE_VARIANTE = re.compile(r'(REC\s*\.?\s*\d+|\b115\b)', re.IGNORECASE)
 # UTILITARIAS
 # ============================================================
 
-def normalizar(texto):
-    if not isinstance(texto, str): return ""
-    nfkd = unicodedata.normalize('NFKD', texto)
-    s = "".join(c for c in nfkd if not unicodedata.combining(c)).upper()
-    s = s.replace('.', '').replace('-', ' ').replace('\u2013', ' ').replace('\u2014', ' ').replace('_', ' ').replace('(', '').replace(')', '')
-    return " ".join(s.split())
-
-def levenshtein(a, b):
-    m, n = len(a), len(b)
-    dp = list(range(n + 1))
-    for i in range(1, m + 1):
-        prev = dp[0]; dp[0] = i
-        for j in range(1, n + 1):
-            temp = dp[j]
-            dp[j] = min(dp[j] + 1, dp[j - 1] + 1, prev + (0 if a[i-1] == b[j-1] else 1))
-            prev = temp
-    return dp[n]
-
-def similaridade(a, b):
-    return SequenceMatcher(None, a, b).ratio()
+# normalizar / levenshtein / similaridade vem de utils.py (compartilhado)
+from utils import normalizar, levenshtein, similaridade
 
 def extrair_variante(nome):
     m = RE_VARIANTE.search(nome)
