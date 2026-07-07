@@ -1366,4 +1366,13 @@ if __name__ == '__main__':
     print('  Gerenciador de PDFs')
     print('  Acesse: http://localhost:5000')
     print('=' * 50)
-    app.run(debug=False, port=5000, use_reloader=False)
+    try:
+        # Servidor de producao leve (Python puro, roda no Windows).
+        # Remove o aviso "development server" do Flask e e mais robusto.
+        from waitress import serve
+        serve(app, host='127.0.0.1', port=5000, threads=8)
+    except ImportError:
+        # waitress nao instalado -> usa o servidor embutido do Flask.
+        # Funciona igual; so mostra o aviso de "development server".
+        # Para remover o aviso: pip install waitress
+        app.run(debug=False, port=5000, use_reloader=False)

@@ -3,6 +3,7 @@
 
 # --- Nucleo (web app e planilhas) ---
 flask
+waitress        # servidor de producao leve (remove o aviso "development server")
 watchdog
 pandas
 openpyxl>=3.0
