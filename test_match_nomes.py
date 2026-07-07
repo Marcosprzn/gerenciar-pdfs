@@ -11,18 +11,18 @@ CASOS = [
 
     # --- mesma pessoa via abreviacao/inicial/erro (ABREVIACAO) ---
     ("Maria Aparecida Silva", "Maria A Silva",          "ABREVIACAO"), # meio abreviado (inicial)
-    ("Luiz Gonzaga Lima",     "Luis Gonzaga Lima",       "ABREVIACAO"), # erro de digitacao Luiz/Luis
+    ("Luiz Gonzaga Lima",     "Luis Gonzaga Lima",       "ABREVIACAO"), # 1 erro de digitacao Luiz/Luis
     ("Joao Paulo Santos",     "J P Santos",              "ABREVIACAO"), # iniciais
     ("Maria Aparecida Silva", "Maria Silva",             "ABREVIACAO"), # meio ausente
-    # Prefixo de 4+ letras no meio -> conservador de proposito: vai para
-    # revisao (DUVIDA), pois liberar prefixos longos casaria MARIA x MARIANA.
-    ("Maria Aparecida Silva", "Maria Apar Silva",       "DUVIDA"),     # meio abreviado (prefixo longo)
+    # "COD 115" / rotulo de grupo nao faz parte do nome -> mesma pessoa
+    ("Jose Carlos dos Santos", "Jose Carlos dos Santos COD 115", "IGUAL"),
 
     # --- ambiguos, devem exigir revisao (DUVIDA) ---
+    # Prefixo de 4+ letras no meio -> pode ser abreviatura -> revisao.
+    ("Maria Aparecida Silva", "Maria Apar Silva",       "DUVIDA"),   # meio truncado (prefixo)
     ("Jose Prazeres",         "Jose Prazeres Vieira",    "DUVIDA"),   # sobrenome extra no fim
     ("Antonio Carlos",        "Antonio Carlos de Jesus", "DUVIDA"),   # sobrenome extra no fim
     ("Maria Silva",           "Maria Silva Santos",      "DUVIDA"),   # sobrenome extra no fim
-    ("Maria Jose Silva",      "Maria Helena Silva",      "DUVIDA"),   # meio conflitante
     ("Ana Paula Silva",       "Ana Paula Silva Souza",   "DUVIDA"),   # sobrenome extra
 
     # --- devem ser rejeitados (DIFERENTE) ---
@@ -32,6 +32,14 @@ CASOS = [
     ("Pedro Almeida",         "Paulo Almeida",           "DIFERENTE"),# primeiro nome diferente
     ("Ana Lima",              "Adriana Lima",            "DIFERENTE"),# substring no primeiro nome
     ("Joao Silva Costa",      "Joao Pereira Ramos",      "DIFERENTE"),# meio e fim diferentes
+    # Meio COMPLETAMENTE diferente (primeiro+ultimo iguais) -> outra pessoa.
+    # Casos reais reportados que antes davam falso "POSSIVEL ERRO NOMINAL":
+    ("Maria Jose Silva",      "Maria Helena Silva",      "DIFERENTE"),# meio diferente
+    ("Jose Carlos do Nascimento Santos", "Jose Martiliano dos Santos", "DIFERENTE"),
+    ("Luiz Pedro da Silva",   "Luiz Pereira da Silva",   "DIFERENTE"),# PEDRO != PEREIRA
+    ("Luiz Pereira da Silva", "Luiz Rodolfo da Silva",   "DIFERENTE"),# PEREIRA != RODOLFO
+    ("Antonio Julio da Cunha Filho", "Antonio Anastacio da Silva Filho", "DIFERENTE"),
+    ("Reginaldo Manoel da Silva", "Edinaldo Vieira da Silva", "DIFERENTE"),
 ]
 
 

@@ -21,20 +21,26 @@ Retorna um dos veredictos:
 from utils import normalizar, levenshtein
 
 CONECTORES = {'DE', 'DA', 'DO', 'DOS', 'DAS', 'E'}
+# Rotulos de grupo/codigo que aparecem no nome do PDF mas NAO fazem parte do
+# nome da pessoa. Ex.: "JOSE ... SANTOS COD 115" -> o "COD 115" so indica que a
+# pessoa e do grupo 115; o numero ja e descartado por ser digito, e o rotulo
+# textual (COD/GRUPO/REC) e ignorado aqui.
+MARCADORES = {'COD', 'GRUPO', 'REC'}
 
 
 def _tokens(nome):
-    """Normaliza, remove conectores e numeros soltos, devolve lista de palavras."""
+    """Normaliza; remove conectores, numeros soltos e rotulos de grupo (COD/REC/GRUPO)."""
     return [t for t in normalizar(nome).split()
-            if t not in CONECTORES and not t.isdigit()]
+            if t not in CONECTORES and t not in MARCADORES and not t.isdigit()]
 
 
 def _token_match(a, b):
     """Dois tokens (palavras) representam o mesmo nome?
 
     Aceita: igualdade; inicial (1 letra); abreviatura curta (prefixo de ate
-    3 letras, ex 'APAR'->'APARECIDA'); erro de digitacao pequeno em palavras
-    longas (levenshtein <= len//4, ou seja 1 erro a cada 4 letras).
+    3 letras, ex 'APAR'->'APARECIDA'); UM erro de digitacao em palavras de 4+
+    letras (ex 'LUIZ'<->'LUIS'). Deliberadamente restrito: aceitar 2+ erros
+    ligaria nomes diferentes (ex 'REGINALDO'<->'EDINALDO').
     """
     if a == b:
         return True
@@ -48,10 +54,9 @@ def _token_match(a, b):
         return True
     if 2 <= len(b) <= 3 and a.startswith(b):
         return True
-    # tolerancia a erro de digitacao em palavras longas (Luiz x Luis)
-    if len(a) >= 4 and len(b) >= 4:
-        if levenshtein(a, b) <= min(len(a), len(b)) // 4:
-            return True
+    # 1 erro de digitacao em palavras de 4+ letras (Luiz x Luis)
+    if len(a) >= 4 and len(b) >= 4 and levenshtein(a, b) == 1:
+        return True
     return False
 
 
@@ -69,6 +74,41 @@ def _todos_casam(menor, maior):
         else:
             return False, casados
     return True, casados
+
+
+def _nao_casados(menor, maior):
+    """Tokens de `menor` que NAO acharam par (via _token_match) em `maior`."""
+    usados = [False] * len(maior)
+    faltantes = []
+    for tm in menor:
+        for i, tM in enumerate(maior):
+            if not usados[i] and _token_match(tm, tM):
+                usados[i] = True
+                break
+        else:
+            faltantes.append(tm)
+    return faltantes
+
+
+def _relacionado(a, b):
+    """a e b sao a mesma raiz de nome (abreviado/truncado)? Ex.: APAR ~ APARECIDA.
+
+    Usado so para graduar a DUVIDA: um nome do meio que compartilha prefixo com
+    o outro pode ser abreviacao (revisar); um nome sem qualquer parentesco de
+    escrita e outra pessoa.
+    """
+    if a == b or a.startswith(b) or b.startswith(a):
+        return True
+    comum = 0
+    for x, y in zip(a, b):
+        if x != y:
+            break
+        comum += 1
+    return comum >= 3
+
+
+def _relacionado_a_algum(t, tokens):
+    return any(_relacionado(t, o) for o in tokens)
 
 
 def _score(tp, tf):
@@ -102,14 +142,21 @@ def comparar_nomes(nome_planilha, nome_pdf):
     menor, maior = (tp, tf) if len(tp) <= len(tf) else (tf, tp)
 
     if ultimo_ok:
-        # Mesmo primeiro e ultimo, mas NAO identicos. Os tokens do menor
-        # precisam todos casar (subset) com o maior. Se sim, a diferenca e
-        # apenas inicial/abreviatura/nome do meio ausente -> mesma pessoa.
-        casam, _ = _todos_casam(menor, maior)
-        if casam:
+        # Mesmo primeiro nome e mesmo ultimo sobrenome, mas NAO identicos.
+        faltantes = _nao_casados(menor, maior)
+        if not faltantes:
+            # Todo o lado menor casou: diferenca e so inicial/abreviatura/
+            # nome do meio ausente -> mesma pessoa.
             return ("ABREVIACAO", score)
-        # Ha um nome do meio que conflita (ex.: MARIA JOSE SILVA x MARIA HELENA SILVA)
-        return ("DUVIDA", score)
+        # Ha nome(s) do meio sem par. Distingue:
+        #   - abreviatura/truncamento (compartilha prefixo) -> DUVIDA (revisar)
+        #     ex.: MARIA APAR SILVA x MARIA APARECIDA SILVA
+        #   - nome do meio COMPLETAMENTE diferente -> outra pessoa
+        #     ex.: LUIZ PEDRO DA SILVA x LUIZ PEREIRA DA SILVA
+        #          JOSE CARLOS ... SANTOS x JOSE MARTILIANO ... SANTOS
+        if all(_relacionado_a_algum(t, maior) for t in faltantes):
+            return ("DUVIDA", score)
+        return ("DIFERENTE", score)
 
     # Ultimo sobrenome difere.
     # Caso "sobrenome extra no fim": o ultimo do menor casa com o penultimo do
