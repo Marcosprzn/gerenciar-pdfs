@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Consolida relatorios .xlsx em uma planilha formatada com duas abas:
+Consolida relatorios .xlsx em uma planilha formatada com tres abas:
+- Geral: resumo por competencia (PDF, Excel, 660, 115, faltas, Status OK/divergente)
 - Falta PDF: pessoas na planilha sem PDF correspondente
 - Falta no Excel: PDFs na pasta sem registro na planilha
 
@@ -84,6 +85,7 @@ print()
 
 falta_pdf = []
 falta_excel = []
+geral = []   # resumo por competencia (aba "Geral")
 
 def normalizar_status(s):
     """Remove acentos e pontuacao para comparar status."""
@@ -161,6 +163,49 @@ for arq in sorted(arquivos):
                     'arquivo': nome,
                 })
 
+    # --- Agregados desta competencia para a aba "Geral" ---
+    # Definicoes:
+    #   Excel = pessoas na planilha (linhas com nome)
+    #   PDF   = PDFs presentes (pessoas encontradas + PDFs extras validos)
+    #   115   = pessoas encontradas como grupo 115 (status "... COMO 115")
+    #   660   = demais pessoas encontradas (grupo padrao)
+    #   Status = OK quando nao falta PDF nem sobra PDF extra
+    g_excel = g_pdf = g_115 = g_found = g_nao = g_extra = 0
+    for _, row in df.iterrows():
+        st = normalizar_status(row[col_status])
+        n_pessoa = str(row.get(col_nome or 'NOMES', '')).strip()
+        n_pdf = str(row.get(col_pdf or 'Nome do Arquivo Encontrado', '')).strip()
+        tem_pdf = n_pdf.lower() not in ('', 'nan', 'none')
+        if 'PDF NA PASTA' in st:                       # PDF extra (sem planilha)
+            if tem_pdf and not ignorar_falta_excel(n_pdf):
+                g_extra += 1
+                g_pdf += 1
+            continue
+        if n_pessoa.lower() in ('', 'nan', 'none'):    # linha sem nome -> ignora
+            continue
+        g_excel += 1                                   # pessoa da planilha
+        if 'NAO ENCONTRADO' in st:
+            g_nao += 1
+        else:                                          # encontrado / possivel erro
+            g_found += 1
+            if tem_pdf:
+                g_pdf += 1
+            if '115' in st:                            # ENCONTRADO COMO 115
+                g_115 += 1
+    g_660 = g_found - g_115
+    if g_nao == 0 and g_extra == 0:
+        g_status = 'OK'
+    else:
+        _p = []
+        if g_nao:   _p.append(f'FALTA {g_nao} PDF')
+        if g_extra: _p.append(f'{g_extra} PDF EXTRA')
+        g_status = '; '.join(_p)
+    geral.append({
+        'mes': mes_ano or nome,
+        'pdf': g_pdf, 'excel': g_excel, '660': g_660, '115': g_115,
+        'falta_pdf': g_nao, 'falta_excel': g_extra, 'status': g_status,
+    })
+
 def chave_mes(item):
     """Extrai (ano, mes) para ordenar por mes dentro do mesmo ano."""
     m = item['mes']
@@ -172,13 +217,27 @@ def chave_mes(item):
 # Ordena por ano primeiro, depois mes, depois nome
 falta_pdf.sort(key=lambda x: (chave_mes(x), x['nome']))
 falta_excel.sort(key=lambda x: (chave_mes(x), x['nome_pdf']))
+geral.sort(key=chave_mes)
 
 # Cria planilha
 from collections import Counter
 pessoas_count = Counter(item['nome'] for item in falta_pdf)
 
 caminho_saida = os.path.join(pasta_raiz, 'consolidado_faltantes.xlsx')
+col_geral = ['Competência', 'PDF', 'Excel', '660', '115', 'Falta PDF', 'Falta Excel', 'Status']
 with pd.ExcelWriter(caminho_saida, engine='openpyxl') as writer:
+    # Aba Geral (primeira): resumo por competencia
+    if geral:
+        df_geral = pd.DataFrame([{
+            'Competência': g['mes'], 'PDF': g['pdf'], 'Excel': g['excel'],
+            '660': g['660'], '115': g['115'],
+            'Falta PDF': g['falta_pdf'], 'Falta Excel': g['falta_excel'],
+            'Status': g['status'],
+        } for g in geral], columns=col_geral)
+    else:
+        df_geral = pd.DataFrame(columns=col_geral)
+    df_geral.to_excel(writer, sheet_name='Geral', index=False)
+
     df_falta_pdf = pd.DataFrame(falta_pdf) if falta_pdf else pd.DataFrame(columns=['mes', 'nome', 'proc', 'pis'])
     df_falta_excel = pd.DataFrame(falta_excel) if falta_excel else pd.DataFrame(columns=['mes', 'nome_pdf', 'arquivo'])
     df_falta_pdf.to_excel(writer, sheet_name='Falta PDF', index=False)
@@ -213,6 +272,32 @@ def formatar_aba(ws, titulo, col_larguras):
     for row in ws.iter_rows(min_row=3, max_row=ws.max_row):
         for cell in row:
             cell.border = bdr
+
+# Aba Geral: totais + formatacao + Status colorido
+ws_geral = wb['Geral']
+if geral:
+    tot = {k: sum(g[k] for g in geral) for k in ('pdf', 'excel', '660', '115', 'falta_pdf', 'falta_excel')}
+    ws_geral.append(['TOTAL', tot['pdf'], tot['excel'], tot['660'], tot['115'],
+                     tot['falta_pdf'], tot['falta_excel'],
+                     'OK' if (tot['falta_pdf'] == 0 and tot['falta_excel'] == 0) else 'DIVERGENTE'])
+formatar_aba(ws_geral, 'GERAL - Resumo por competência', [16, 10, 10, 10, 10, 12, 12, 16])
+# Status colorido (verde = OK, vermelho = divergente) e alinhamento central dos numeros
+fill_ok = PatternFill('solid', fgColor='C6EFCE');  font_ok = Font(color='006100', bold=True)
+fill_bad = PatternFill('solid', fgColor='FFC7CE'); font_bad = Font(color='9C0006', bold=True)
+for r in range(3, ws_geral.max_row + 1):
+    for c in range(2, 8):  # colunas numericas B..G
+        ws_geral.cell(row=r, column=c).alignment = Alignment(horizontal='center')
+    cel = ws_geral.cell(row=r, column=8)  # coluna Status
+    cel.alignment = Alignment(horizontal='center')
+    val = str(cel.value or '')
+    if val == 'OK':
+        cel.fill = fill_ok; cel.font = font_ok
+    elif val:
+        cel.fill = fill_bad; cel.font = font_bad
+# Destaca a linha TOTAL
+if geral:
+    for c in range(1, 9):
+        ws_geral.cell(row=ws_geral.max_row, column=c).font = Font(bold=True)
 
 ws_falta = wb['Falta PDF']
 formatar_aba(ws_falta, 'FALTA PDF - Pessoas na planilha sem PDF correspondente', [12, 50, 20, 20])
