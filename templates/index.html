@@ -8,23 +8,62 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    /* ─── Design tokens: TEMA ESCURO (padrao) ─── */
     :root {
-      --bg: #07071a;
-      --bg2: #0e0e28;
-      --surface: rgba(255,255,255,0.05);
-      --surface2: rgba(255,255,255,0.09);
-      --border: rgba(255,255,255,0.08);
-      --border2: rgba(255,255,255,0.15);
-      --text: #e2e8f0;
-      --text2: #94a3b8;
+      color-scheme: dark;
+      /* Marca */
       --purple: #7c3aed;
       --purple2: #6d28d9;
       --blue: #3b82f6;
-      --green: #10b981;
-      --yellow: #f59e0b;
-      --red: #ef4444;
+      /* Status (semanticos) */
+      --green: #34d399;
+      --yellow: #fbbf24;
+      --red: #f87171;
+      /* Superficies / texto */
+      --bg: #0b0b1e;
+      --bg2: #12122e;
+      --bg3: #1c1c40;            /* antes faltava definir -> corrige fundos */
+      --surface: rgba(255,255,255,0.05);
+      --surface2: rgba(255,255,255,0.09);
+      --border: rgba(255,255,255,0.09);
+      --border2: rgba(255,255,255,0.16);
+      --text: #e6edf6;
+      --text2: #9aa7bd;
+      /* Efeitos (tokenizados p/ funcionar nos 2 temas) */
+      --glow1: rgba(124,58,237,0.15);
+      --glow2: rgba(59,130,246,0.10);
+      --header-bg: rgba(11,11,30,0.85);
+      --overlay: rgba(7,7,26,0.72);
+      --scroll-thumb: rgba(255,255,255,0.14);
+      --shadow: 0 8px 32px rgba(0,0,0,0.5);
       --radius: 14px;
       --radius-sm: 8px;
+    }
+
+    /* ─── Design tokens: TEMA CLARO ─── */
+    :root[data-theme="light"] {
+      color-scheme: light;
+      --purple: #7c3aed;
+      --purple2: #6d28d9;
+      --blue: #2563eb;
+      --green: #059669;
+      --yellow: #b45309;
+      --red: #dc2626;
+      --bg: #f1f5f9;
+      --bg2: #ffffff;
+      --bg3: #f8fafc;
+      --surface: #ffffff;
+      --surface2: #f1f5f9;
+      --border: #e2e8f0;
+      --border2: #cbd5e1;
+      --text: #0f172a;
+      --text2: #5b6b82;
+      --glow1: rgba(124,58,237,0.10);
+      --glow2: rgba(37,99,235,0.08);
+      --header-bg: rgba(255,255,255,0.85);
+      --overlay: rgba(15,23,42,0.45);
+      --scroll-thumb: rgba(15,23,42,0.20);
+      --shadow: 0 8px 24px rgba(15,23,42,0.12);
     }
 
     html { font-family: 'Inter', sans-serif; font-size: 14px; }
@@ -33,14 +72,14 @@
     /* ─── Glow BG ─── */
     body::before {
       content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
-      background: radial-gradient(ellipse 60% 40% at 20% 10%, rgba(124,58,237,0.15) 0%, transparent 70%),
-                  radial-gradient(ellipse 50% 40% at 80% 80%, rgba(59,130,246,0.10) 0%, transparent 70%);
+      background: radial-gradient(ellipse 60% 40% at 20% 10%, var(--glow1) 0%, transparent 70%),
+                  radial-gradient(ellipse 50% 40% at 80% 80%, var(--glow2) 0%, transparent 70%);
     }
 
     /* ─── Nav ─── */
     header {
       position: sticky; top: 0; z-index: 100;
-      background: rgba(7,7,26,0.85); backdrop-filter: blur(20px);
+      background: var(--header-bg); backdrop-filter: blur(20px);
       border-bottom: 1px solid var(--border2);
       padding: 0 28px;
       display: flex; align-items: center; gap: 32px; height: 60px;
@@ -109,7 +148,7 @@
       padding: 22px; display: flex; flex-direction: column; gap: 12px;
     }
     .config-box h3 { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
-    .config-info { font-size: 12px; color: var(--text2); background: rgba(0,0,0,0.3); border-radius: 6px; padding: 10px 12px; min-height: 38px; word-break: break-all; }
+    .config-info { font-size: 12px; color: var(--text2); background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; min-height: 38px; word-break: break-all; }
     .config-info.filled { color: var(--green); }
 
     /* ─── Badges ─── */
@@ -225,13 +264,13 @@
     @keyframes spin { to { transform: rotate(360deg); } }
 
     /* ─── Loading overlay ─── */
-    #loading { position: fixed; inset: 0; background: rgba(7,7,26,0.7); backdrop-filter: blur(6px);
+    #loading { position: fixed; inset: 0; background: var(--overlay); backdrop-filter: blur(6px);
                z-index: 999; display: none; align-items: center; justify-content: center; flex-direction: column; gap: 16px; }
     #loading.show { display: flex; }
     #loading p { color: var(--text2); font-size: 14px; }
 
     /* ─── Modal ─── */
-    #modal { position: fixed; inset: 0; background: rgba(7,7,26,0.8); backdrop-filter: blur(8px);
+    #modal { position: fixed; inset: 0; background: var(--overlay); backdrop-filter: blur(8px);
              z-index: 1000; display: none; align-items: center; justify-content: center; padding: 24px; }
     #modal.show { display: flex; }
     .modal-box { background: var(--bg2); border: 1px solid var(--border2); border-radius: 18px;
@@ -264,14 +303,91 @@
     /* Scrollbar */
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 3px; }
+
+    /* ══════════ MELHORIAS DE UI (design system) ══════════ */
+
+    /* ─── Tabelas de resultado (antes .table nao tinha estilo) ─── */
+    .subtab-panel { overflow-x: auto; }            /* tabelas largas rolam no mobile */
+    table.table { width: 100%; border-collapse: collapse; background: var(--surface);
+      border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+    table.table th {
+      position: sticky; top: 0; z-index: 2;
+      background: var(--bg3); color: var(--text2);
+      text-align: left; font-weight: 600; font-size: 11px; letter-spacing: .04em;
+      text-transform: uppercase; padding: 10px 14px; border-bottom: 1px solid var(--border2);
+      white-space: nowrap;
+    }
+    table.table td { padding: 9px 14px; border-bottom: 1px solid var(--border);
+      font-variant-numeric: tabular-nums; vertical-align: middle; }
+    table.table tbody tr { transition: background .15s; }
+    table.table tbody tr:nth-child(even) { background: var(--surface); }
+    table.table tbody tr:hover { background: var(--surface2); }
+    table.table tbody tr:last-child td { border-bottom: none; }
+
+    /* ─── Chips de status (cor + ponto = nao depende so da cor) ─── */
+    .st { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px;
+      border-radius: 999px; font-size: 11px; font-weight: 600; white-space: nowrap; line-height: 1.4; }
+    .st::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+    .st-ok    { color: var(--green);  background: color-mix(in srgb, var(--green) 14%, transparent); }
+    .st-abrev { color: var(--blue);   background: color-mix(in srgb, var(--blue) 14%, transparent); }
+    .st-warn  { color: var(--yellow); background: color-mix(in srgb, var(--yellow) 16%, transparent); }
+    .st-miss  { color: var(--red);    background: color-mix(in srgb, var(--red) 14%, transparent); }
+    .st-extra { color: var(--text2);  background: var(--surface2); }
+
+    /* ─── Foco visivel (acessibilidade / teclado) ─── */
+    a:focus-visible, button:focus-visible, input:focus-visible,
+    [tabindex]:focus-visible, .tab-btn:focus-visible, .subtab-btn:focus-visible {
+      outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 6px;
+    }
+    /* alvo de toque confortavel */
+    .btn { min-height: 38px; }
+    .tab-btn, .subtab-btn { min-height: 36px; }
+
+    /* ─── Toggle de tema ─── */
+    .theme-toggle { display: inline-flex; align-items: center; justify-content: center;
+      width: 36px; height: 36px; border-radius: 9px; border: 1px solid var(--border2);
+      background: var(--surface); color: var(--text2); cursor: pointer; transition: all .2s; flex-shrink: 0; }
+    .theme-toggle:hover { color: var(--text); background: var(--surface2); border-color: var(--blue); }
+    .theme-toggle svg { width: 18px; height: 18px; }
+    .theme-toggle .icon-sun { display: none; }
+    :root[data-theme="light"] .theme-toggle .icon-sun { display: block; }
+    :root[data-theme="light"] .theme-toggle .icon-moon { display: none; }
+
+    /* ─── Ajustes do tema claro para elementos com cor fixa ─── */
+    :root[data-theme="light"] .badge-green { background: rgba(5,150,105,0.12);  color: #047857; border-color: rgba(5,150,105,0.30); }
+    :root[data-theme="light"] .badge-blue  { background: rgba(37,99,235,0.10);  color: #1d4ed8; border-color: rgba(37,99,235,0.28); }
+    :root[data-theme="light"] .badge-yellow{ background: rgba(180,83,9,0.12);   color: #92400e; border-color: rgba(180,83,9,0.30); }
+    :root[data-theme="light"] .badge-red   { background: rgba(220,38,38,0.10);  color: #b91c1c; border-color: rgba(220,38,38,0.28); }
+    :root[data-theme="light"] .badge-purple{ background: rgba(124,58,237,0.10); color: #6d28d9; border-color: rgba(124,58,237,0.28); }
+    :root[data-theme="light"] .toast-success { color: #047857; }
+    :root[data-theme="light"] .toast-error   { color: #b91c1c; }
+    :root[data-theme="light"] .toast-info     { color: #1d4ed8; }
+    :root[data-theme="light"] .toast-warning  { color: #92400e; }
+    :root[data-theme="light"] .logo { -webkit-text-fill-color: initial; }
+
+    /* ─── Respeita quem pediu menos animacao ─── */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+    }
   </style>
 </head>
 <body>
 
+<script>
+  /* Tema claro/escuro — aplica cedo p/ nao piscar, persiste no navegador */
+  (function(){ try { var t = localStorage.getItem('tema'); if (t === 'light') document.documentElement.setAttribute('data-theme', 'light'); } catch(e){} })();
+  function toggleTheme(){
+    var el = document.documentElement;
+    var claro = el.getAttribute('data-theme') === 'light';
+    if (claro) el.removeAttribute('data-theme'); else el.setAttribute('data-theme', 'light');
+    try { localStorage.setItem('tema', claro ? 'dark' : 'light'); } catch(e){}
+  }
+</script>
+
 <!-- ─── Header ─────────────────────────────────────────────── -->
 <header>
-  <div class="logo"><span>📋</span> Gerenciador de PDFs</div>
+  <div class="logo"><span><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12l2 2 4-4"/></svg></span> Gerenciador de PDFs</div>
   <div class="tabs">
     <button class="tab-btn active" onclick="showTab('config')">
       <span class="status-dot" id="dot-config"></span> ⚙️ Configuração
@@ -295,7 +411,11 @@
       🕒 Histórico
     </button>
   </div>
-  <div style="margin-left:auto;">
+  <div style="margin-left:auto; display:flex; align-items:center; gap:10px;">
+    <button class="theme-toggle" onclick="toggleTheme()" aria-label="Alternar tema claro e escuro" title="Alternar tema">
+      <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+    </button>
     <button class="btn btn-red btn-sm" onclick="encerrarSistema()">🚪 Sair</button>
   </div>
 </header>
@@ -1382,7 +1502,7 @@ window.showAuditTab = function(comp) {
               <td>${formatPIS(e.pis)}</td>
               <td>${e.nome_planilha}</td>
               <td style="font-weight:bold;">${e.nome_pdf}</td>
-              <td style="color:var(--green);">${e.detalhe}</td>
+              <td><span class="st st-ok">${e.detalhe}</span></td>
             </tr>
           `).join('')}
         </tbody>
@@ -1407,7 +1527,7 @@ window.showAuditTab = function(comp) {
               <td>${formatPIS(e.pis)}</td>
               <td>${e.nome_planilha}</td>
               <td style="font-weight:bold;">${e.nome_pdf}</td>
-              <td style="color:var(--green);">${e.detalhe}</td>
+              <td><span class="st st-abrev">${e.detalhe}</span></td>
             </tr>
           `).join('')}
         </tbody>
