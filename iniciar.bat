@@ -24,8 +24,9 @@ if errorlevel 1 (
     echo.
 )
 
-echo  Acesse no navegador: http://localhost:5000
-echo  Para encerrar o servidor pelo navegador, use o botao "Sair" na interface.
+echo  Iniciando servidor...
+echo  Acesse: http://localhost:5000
 echo.
-python app.py
-if errorlevel 1 pause
+start python app.py
+timeout /t 3 /nobreak >nul
+start http://localhost:5000
