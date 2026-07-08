@@ -1139,17 +1139,19 @@ async function buscarPlanilhas() {
     <thead style="background:var(--bg3);">
       <tr>
         <th style="padding:10px; text-align:left; border-bottom:1px solid var(--border);">PIS</th>
+        <th style="padding:10px; text-align:left; border-bottom:1px solid var(--border);">Processo</th>
         <th style="padding:10px; text-align:left; border-bottom:1px solid var(--border);">Nome Atual na Planilha</th>
         <th style="padding:10px; text-align:left; border-bottom:1px solid var(--border);">Aparece em</th>
         <th style="padding:10px; text-align:left; border-bottom:1px solid var(--border); width:350px;">Ação Lote (Físico)</th>
       </tr>
     </thead>
     <tbody>`;
-    
+
   res.resultados.forEach((r, idx) => {
     html += `
       <tr style="border-bottom:1px solid var(--border);">
         <td style="padding:10px;">${formatPIS(r.pis)}</td>
+        <td style="padding:10px; font-variant-numeric:tabular-nums;">${r.proc || '-'}</td>
         <td style="padding:10px; font-weight:500;">${r.nome_atual}</td>
         <td style="padding:10px; font-size:11px; color:var(--text2);">${r.competencias.join(', ')}</td>
         <td style="padding:10px;">

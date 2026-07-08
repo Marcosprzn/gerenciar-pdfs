@@ -852,8 +852,19 @@ def buscar_planilhas():
                     resultados_dict[chave] = {
                         'pis': pis,
                         'nome_atual': nome_raw,
+                        'proc': '',
                         'competencias': []
                     }
+                # Processo (PROC.) da planilha — pega o primeiro valor valido
+                if not resultados_dict[chave]['proc']:
+                    for _k in ('PROC.', 'Processo', 'PROC', 'PROCESSO'):
+                        _v = row.get(_k, '')
+                        _s = str(_v).strip()
+                        if _s and _s.lower() not in ('nan', 'none'):
+                            if _s.endswith('.0'):
+                                _s = _s[:-2]
+                            resultados_dict[chave]['proc'] = _s
+                            break
                 if comp not in resultados_dict[chave]['competencias']:
                     resultados_dict[chave]['competencias'].append(comp)
                     
