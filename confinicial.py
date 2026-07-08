@@ -298,11 +298,12 @@ def verificar_pdfs(df, pasta_pdfs):
     def _filtrar_sem_variante(lista):
         return [a for a in lista if not a["variante"]]
 
-    def _buscar_em_grupo(nome_norm, grupo, usar_llm=False):
+    def _buscar_em_grupo(nome_norm, grupo, usar_llm=False, niveis=("IGUAL", "ABREVIACAO", "DUVIDA")):
         """Busca nome_norm no grupo de PDFs usando o matcher por tokens
         (match_nomes.comparar_nomes). Retorna (status, arquivo_obj) ou (None, None).
 
-        Prioridade:
+        `niveis` define QUAIS veredictos sao aceitos nesta chamada, para permitir
+        casamento em passadas por confianca (ver o loop principal):
           IGUAL      -> ENCONTRADO
           ABREVIACAO -> ENCONTRADO COM ABREVIAÇÃO
           DUVIDA     -> POSSÍVEL ERRO NOMINAL (ou LLM decide, se ligado)
@@ -329,12 +330,12 @@ def verificar_pdfs(df, pasta_pdfs):
             elif veredicto == "DUVIDA":
                 duvidas.append((score, arq))
 
-        if melhor_igual is not None:
+        if "IGUAL" in niveis and melhor_igual is not None:
             return "ENCONTRADO", melhor_igual
-        if melhor_abrev is not None:
+        if "ABREVIACAO" in niveis and melhor_abrev is not None:
             return "ENCONTRADO COM ABREVIAÇÃO", melhor_abrev
 
-        if duvidas:
+        if "DUVIDA" in niveis and duvidas:
             duvidas.sort(key=lambda x: x[0], reverse=True)
             if usar_llm and llm_matcher:
                 # O LLM arbitra os casos duvidosos, do mais provavel ao menos.
@@ -360,57 +361,62 @@ def verificar_pdfs(df, pasta_pdfs):
     status_lista = [""] * len(df)
     arquivo_encontrado_lista = [""] * len(df)
 
-    # Processa 115 primeiro (arquivos podem ser tomados por PADRAO depois)
-    for ordem in ["115", "PADRAO"]:
-        for idx, row in df.iterrows():
-            if status_lista[idx]:
-                continue
-            nome_planilha = row['NOMES']
-            tipo_lista = row.get('TIPO_LISTA', 'PADRAO')
-            if tipo_lista != ordem:
-                continue
+    # Match em PASSADAS POR CONFIANCA: primeiro TODOS os exatos (IGUAL) de todas
+    # as linhas, depois as abreviacoes, e so por ultimo as duvidas — sempre com
+    # os PDFs que sobraram. Isso evita o "roubo guloso": um nome curto pegando,
+    # como duvida, o PDF que casa EXATAMENTE com outra pessoa.
+    # Ex.: "JOSE CARLOS DOS SANTOS" nao rouba mais o PDF de
+    #      "JOSE CARLOS DO NASCIMENTO SANTOS".
+    for niveis in [("IGUAL",), ("ABREVIACAO",), ("DUVIDA",)]:
+        for ordem in ["115", "PADRAO"]:   # 115 tem prioridade nos arquivos
+            for idx, row in df.iterrows():
+                if status_lista[idx]:
+                    continue
+                nome_planilha = row['NOMES']
+                tipo_lista = row.get('TIPO_LISTA', 'PADRAO')
+                if tipo_lista != ordem:
+                    continue
 
-            nome_norm = normalizar_texto(nome_planilha)
+                nome_norm = normalizar_texto(nome_planilha)
 
-            # Define o grupo primario baseado no tipo da lista
-            if tipo_lista == "115":
-                grupo_primario = _filtrar_por_variante(arquivos_disponiveis, "REC115")
-                grupo_secundario = _filtrar_sem_variante(arquivos_disponiveis)
-            else:
-                grupo_primario = _filtrar_sem_variante(arquivos_disponiveis)
-                grupo_secundario = _filtrar_por_variante(arquivos_disponiveis, "REC115")
+                # Define o grupo primario baseado no tipo da lista
+                if tipo_lista == "115":
+                    grupo_primario = _filtrar_por_variante(arquivos_disponiveis, "REC115")
+                    grupo_secundario = _filtrar_sem_variante(arquivos_disponiveis)
+                else:
+                    grupo_primario = _filtrar_sem_variante(arquivos_disponiveis)
+                    grupo_secundario = _filtrar_por_variante(arquivos_disponiveis, "REC115")
 
-            # Busca no grupo primario
-            status, match_obj = _buscar_em_grupo(nome_norm, grupo_primario, USAR_LLM)
+                status, match_obj = _buscar_em_grupo(nome_norm, grupo_primario, USAR_LLM, niveis)
 
-            # Se nao achou match valido (match_obj None), busca no secundario
-            var_diff = False
-            if not match_obj:
-                status, match_obj = _buscar_em_grupo(nome_norm, grupo_secundario, USAR_LLM)
-                if match_obj:
-                    var_diff = True
-
-            # Fallback: vasculha TODOS os arquivos se ainda nao achou
-            if not match_obj and tipo_lista == "115":
-                for a in arquivos_disponiveis:
-                    if a["norm"] == nome_norm:
-                        status, match_obj = "ENCONTRADO", a
+                var_diff = False
+                if not match_obj:
+                    status, match_obj = _buscar_em_grupo(nome_norm, grupo_secundario, USAR_LLM, niveis)
+                    if match_obj:
                         var_diff = True
-                        break
 
-            # Status final
-            if match_obj:
-                if "POSSIVEL ERRO NOMINAL" not in status:
+                # Fallback exato (so na passada IGUAL): vasculha TODOS os arquivos
+                if not match_obj and tipo_lista == "115" and "IGUAL" in niveis:
+                    for a in arquivos_disponiveis:
+                        if a["norm"] == nome_norm:
+                            status, match_obj = "ENCONTRADO", a
+                            var_diff = True
+                            break
+
+                if match_obj:
                     arquivos_disponiveis.remove(match_obj)
-                if tipo_lista == "115" and "ENCONTRADO" in status:
-                    status = "ENCONTRADO COMO 115"
-                if var_diff and "ENCONTRADO" in status:
-                    status = status + " (VAR DIFF)"
-                status_lista[idx] = status
-                arquivo_encontrado_lista[idx] = os.path.splitext(match_obj["real"])[0]
-            else:
-                status_lista[idx] = "NÃO ENCONTRADO NO .PDF"
-                arquivo_encontrado_lista[idx] = ""
+                    if tipo_lista == "115" and "ENCONTRADO" in status:
+                        status = "ENCONTRADO COMO 115"
+                    if var_diff and "ENCONTRADO" in status:
+                        status = status + " (VAR DIFF)"
+                    status_lista[idx] = status
+                    arquivo_encontrado_lista[idx] = os.path.splitext(match_obj["real"])[0]
+
+    # Linhas sem match em nenhuma passada -> nao encontrado
+    for idx in range(len(status_lista)):
+        if not status_lista[idx]:
+            status_lista[idx] = "NÃO ENCONTRADO NO .PDF"
+            arquivo_encontrado_lista[idx] = ""
 
     # Pos-processamento: linha duplicada na planilha (mesmo PIS de alguem que
     # JA recebeu PDF) nao e "faltando PDF" -> marca como DUPLICADO. Ex.: a mesma
