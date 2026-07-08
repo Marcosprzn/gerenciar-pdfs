@@ -400,7 +400,8 @@ def verificar_pdfs(df, pasta_pdfs):
 
             # Status final
             if match_obj:
-                arquivos_disponiveis.remove(match_obj)
+                if "POSSIVEL ERRO NOMINAL" not in status:
+                    arquivos_disponiveis.remove(match_obj)
                 if tipo_lista == "115" and "ENCONTRADO" in status:
                     status = "ENCONTRADO COMO 115"
                 if var_diff and "ENCONTRADO" in status:

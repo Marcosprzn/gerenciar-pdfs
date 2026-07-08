@@ -352,7 +352,8 @@ def conferir(planilha_path, pasta_pdfs, usar_llm=False):
             match, status, var_diff = buscar_melhor_match(nome, arquivos, usar_llm, nivel_rigor=rigor, tipo_lista=tipo)
 
             if match:
-                arquivos.remove(match)
+                if "POSSIVEL ERRO NOMINAL" not in status:
+                    arquivos.remove(match)
                 if tipo == "115" and "ENCONTRADO" in status:
                     status = "ENCONTRADO COMO 115"
                 if var_diff and "ENCONTRADO" in status:
