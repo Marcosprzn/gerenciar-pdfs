@@ -423,6 +423,12 @@
 <!-- ─── Toast container ─────────────────────────────────────── -->
 <div id="toast-container"></div>
 
+<!-- ─── Progresso da análise (canto superior direito) ───────── -->
+<div id="analise-progresso" style="position:fixed; top:70px; right:20px; z-index:9998; display:none; align-items:center; gap:10px; padding:10px 16px; border-radius:10px; background:var(--surface2); border:1px solid var(--border2); box-shadow:var(--shadow); font-size:13px; font-weight:600; color:var(--text); backdrop-filter:blur(12px);">
+  <span class="spinner" style="width:14px;height:14px;border-width:2px;"></span>
+  <span id="analise-progresso-texto">Analisando...</span>
+</div>
+
 <!-- ─── Loading overlay ─────────────────────────────────────── -->
 <div id="loading">
   <div class="spinner" style="width:40px;height:40px;border-width:3px;"></div>
@@ -1377,18 +1383,35 @@ async function analisarConciliacao() {
   const oldText = btn.innerHTML;
   btn.innerHTML = '⏳ Analisando...';
   btn.disabled = true;
-  
-  const r = await post('/api/analisar-conciliacao', {});
-  btn.innerHTML = oldText;
-  btn.disabled = false;
-  
-  if (!r.ok) {
-    toast('Erro: ' + r.erro, 'error');
-    return;
+
+  // Indicador de progresso no canto superior direito
+  const prog = document.getElementById('analise-progresso');
+  const progTxt = document.getElementById('analise-progresso-texto');
+  progTxt.textContent = 'Analisando...';
+  prog.style.display = 'flex';
+  const pollId = setInterval(async () => {
+    try {
+      const p = await get('/api/progresso-conciliacao');
+      if (p && p.total) {
+        progTxt.textContent = `Analisando ${p.pct}% (${p.atual}/${p.total})` + (p.label ? ` — ${p.label}` : '');
+      }
+    } catch (e) { /* ignora falhas de polling */ }
+  }, 400);
+
+  try {
+    const r = await post('/api/analisar-conciliacao', {});
+    if (!r.ok) {
+      toast('Erro: ' + r.erro, 'error');
+      return;
+    }
+    window.auditData = r.resultados;
+    renderAuditTabs();
+  } finally {
+    clearInterval(pollId);
+    prog.style.display = 'none';
+    btn.innerHTML = oldText;
+    btn.disabled = false;
   }
-  
-  window.auditData = r.resultados;
-  renderAuditTabs();
 }
 
 function renderAuditTabs() {

@@ -51,6 +51,9 @@ _state = {
     'planilhas': {}       # { '01-2008': {'caminho': '...', 'df': DataFrame, 'nome_original': '...'} }
 }
 
+# Progresso da analise de conciliacao (lido pelo frontend via polling)
+_progresso_conc = {'atual': 0, 'total': 0, 'rodando': False, 'label': ''}
+
 HISTORICO_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'historico.json')
 
 def load_historico():
@@ -729,10 +732,14 @@ def analisar_conciliacao():
             return "PDF NA PASTA, MAS NÃO NA PLANILHA"
         return str(s)
 
+    _progresso_conc.update(atual=0, total=len(_state['planilhas']), rodando=True, label='')
+
     for comp, p_data in _state['planilhas'].items():
+        _progresso_conc['label'] = comp
+        _progresso_conc['atual'] += 1
         df = p_data['df'].copy()
         pasta_pdfs = mapa_pastas.get(comp)
-        
+
         if not pasta_pdfs:
             resultados_audit[comp] = {
                 'erro_pasta': True,
@@ -798,7 +805,14 @@ def analisar_conciliacao():
             'caminho_planilha': p_data['caminho']
         }
 
+    _progresso_conc['rodando'] = False
     return jsonify({'ok': True, 'resultados': resultados_audit})
+
+@app.route('/api/progresso-conciliacao', methods=['GET'])
+def progresso_conciliacao():
+    p = dict(_progresso_conc)
+    p['pct'] = round(p['atual'] / p['total'] * 100) if p['total'] else 0
+    return jsonify(p)
 
 @app.route('/api/buscar-planilhas', methods=['POST'])
 def buscar_planilhas():
@@ -1391,4 +1405,4 @@ if __name__ == '__main__':
         # waitress nao instalado -> usa o servidor embutido do Flask.
         # Funciona igual; so mostra o aviso de "development server".
         # Para remover o aviso: pip install waitress
-        app.run(debug=False, port=5000, use_reloader=False)
+        app.run(debug=False, port=5000, use_reloader=False, threaded=True)
