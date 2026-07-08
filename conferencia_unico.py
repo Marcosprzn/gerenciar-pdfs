@@ -3,6 +3,7 @@ import os, re, sys, math, datetime, unicodedata, shutil
 import tkinter as tk
 from tkinter import filedialog
 from difflib import SequenceMatcher
+from tqdm import tqdm
 
 import pandas as pd
 import xlrd
@@ -342,7 +343,8 @@ def conferir(planilha_path, pasta_pdfs, usar_llm=False):
 
     # 3 Passagens: 1 (Exato), 2 (Bom), 3 (Duvidoso/Fuzzy)
     for rigor in [1, 2, 3]:
-        for idx, row in df.iterrows():
+        desc = {1: "Exato", 2: "Abreviacao", 3: "Similaridade"}[rigor]
+        for idx, row in tqdm(df.iterrows(), desc=desc, unit="pess", total=len(df), leave=False):
             if status_lista[idx]: 
                 continue
                 
