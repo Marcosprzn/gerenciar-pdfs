@@ -15,6 +15,9 @@ CASOS = [
     ("Joao Paulo Santos",     "J P Santos",              "ABREVIACAO"), # iniciais
     # "COD 115" / rotulo de grupo nao faz parte do nome -> mesma pessoa
     ("Jose Carlos dos Santos", "Jose Carlos dos Santos COD 115", "IGUAL"),
+    # Apelido entre parenteses nao faz parte do nome -> mesma pessoa
+    ("Jose Severino Alves",    "Jose Severino Alves ( FI )",       "IGUAL"),
+    ("Jose Severino da Silva", "Jose Severino da Silva ( CALADO )", "IGUAL"),
 
     # --- ambiguos, devem exigir revisao (DUVIDA) ---
     # Prefixo de 4+ letras no meio -> pode ser abreviatura -> revisao.

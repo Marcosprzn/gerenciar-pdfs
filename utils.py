@@ -9,8 +9,13 @@ correcao valha para todo o sistema.
 A versao de `normalizar` abaixo e o "superset" das antigas: faz tudo o que
 elas faziam e ainda trata travessoes (– —), portanto e compativel com todas.
 """
+import re
 import unicodedata
 from difflib import SequenceMatcher
+
+# Trecho entre parenteses/colchetes = apelido/anotacao, nao faz parte do nome.
+# Ex.: "JOSE SEVERINO ALVES ( FI )" -> "JOSE SEVERINO ALVES"
+_RE_PARENTESES = re.compile(r'\([^)]*\)|\[[^\]]*\]')
 
 __all__ = ["normalizar", "normalizar_texto", "levenshtein", "similaridade", "calcular_similaridade"]
 
@@ -20,16 +25,19 @@ def normalizar(texto):
 
     Regras:
       - Remove acentos (NFKD + descarte de combinantes).
-      - Remove '.', '(' e ')'.
+      - Remove o APELIDO/anotacao entre parenteses ou colchetes por inteiro.
+      - Remove '.', '(' e ')' residuais.
       - Troca '-', '_' e travessoes (– —) por espaco.
       - Colapsa espacos multiplos.
 
-    Ex.: 'José A. Silva-Souza (REC)' -> 'JOSE A SILVA SOUZA REC'
+    Ex.: 'José A. Silva-Souza' -> 'JOSE A SILVA SOUZA'
+         'JOSE SEVERINO ALVES ( FI )' -> 'JOSE SEVERINO ALVES'
     """
     if not isinstance(texto, str):
         return ""
     nfkd = unicodedata.normalize('NFKD', texto)
     s = "".join(c for c in nfkd if not unicodedata.combining(c)).upper()
+    s = _RE_PARENTESES.sub(' ', s)   # remove "( apelido )" inteiro
     s = (s.replace('.', '')
           .replace('(', '')
           .replace(')', '')
