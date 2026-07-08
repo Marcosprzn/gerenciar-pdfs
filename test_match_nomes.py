@@ -44,6 +44,13 @@ CASOS = [
     ("Luiz Pereira da Silva", "Luiz Rodolfo da Silva",   "DIFERENTE"),# PEREIRA != RODOLFO
     ("Antonio Julio da Cunha Filho", "Antonio Anastacio da Silva Filho", "DIFERENTE"),
     ("Reginaldo Manoel da Silva", "Edinaldo Vieira da Silva", "DIFERENTE"),
+    # Sufixo geracional (FILHO/NETO/...) e distintivo: pai x filho = diferentes.
+    ("Severino Antonio da Silva", "Severino Antonio da Silva Filho", "DIFERENTE"),
+    ("Severino Antonio da Silva Filho", "Severino Antonio da Silva Neto", "DIFERENTE"),
+    ("Jose Francisco Barbosa Irmao", "Jose Francisco Barbosa", "DIFERENTE"),
+    # ...mas se AMBOS tem o mesmo sufixo, seguem casando normalmente:
+    ("Antonio Anastacio da Silva Filho", "Antonio Anastacio da Silva Filho", "IGUAL"),
+    ("Joao Franco da Silva Filho", "J Franco da Silva Filho", "ABREVIACAO"),
 ]
 
 

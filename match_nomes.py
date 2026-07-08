@@ -27,11 +27,20 @@ CONECTORES = {'DE', 'DA', 'DO', 'DOS', 'DAS', 'E'}
 # textual (COD/GRUPO/REC) e ignorado aqui.
 MARCADORES = {'COD', 'GRUPO', 'REC'}
 
+# Sufixos geracionais: sao DISTINTIVOS. "JOSE SILVA" e "JOSE SILVA FILHO" sao
+# pessoas diferentes (pai x filho). So casam se ambos tiverem o mesmo sufixo.
+SUFIXOS_GERACIONAIS = {'FILHO', 'FILHA', 'NETO', 'NETA', 'JUNIOR', 'SOBRINHO', 'SOBRINHA', 'IRMAO', 'IRMA'}
+
 
 def _tokens(nome):
     """Normaliza; remove conectores, numeros soltos e rotulos de grupo (COD/REC/GRUPO)."""
     return [t for t in normalizar(nome).split()
             if t not in CONECTORES and t not in MARCADORES and not t.isdigit()]
+
+
+def _sufixo_geracional(tokens):
+    """Devolve o sufixo geracional (FILHO/NETO/...) se for o ultimo token, senao None."""
+    return tokens[-1] if tokens and tokens[-1] in SUFIXOS_GERACIONAIS else None
 
 
 def _token_match(a, b):
@@ -134,6 +143,11 @@ def comparar_nomes(nome_planilha, nome_pdf):
         return ("IGUAL", 1.0)
 
     score = _score(tp, tf)
+
+    # Sufixo geracional (FILHO/NETO/JUNIOR/...) e distintivo: se um lado tem e o
+    # outro nao (ou sao diferentes), sao pessoas diferentes (ex.: pai x filho).
+    if _sufixo_geracional(tp) != _sufixo_geracional(tf):
+        return ("DIFERENTE", score)
 
     primeiro_ok = _token_match(tp[0], tf[0])
     ultimo_ok = _token_match(tp[-1], tf[-1])
