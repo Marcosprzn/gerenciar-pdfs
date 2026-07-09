@@ -192,6 +192,28 @@ def e_um_nome_valido(texto):
 
 # --- FUNÇÕES PRINCIPAIS ---
 
+_ABA_PROCESSOS = "FGTS EM ATRASO - PROCESSOS"
+
+def _linhas_ocultas(caminho):
+    """Indices (0-based) das linhas OCULTAS na aba de processos.
+    Pessoas em linha oculta foram excluidas de proposito. Le so a formatacao
+    uma vez por planilha (nao entra no loop de match). set() se nao der."""
+    ext = os.path.splitext(caminho)[1].lower()
+    try:
+        if ext == '.xls':
+            import xlrd
+            wb = xlrd.open_workbook(caminho, formatting_info=True)
+            sh = wb.sheet_by_name(_ABA_PROCESSOS) if _ABA_PROCESSOS in wb.sheet_names() else wb.sheet_by_index(0)
+            return {rx for rx, info in sh.rowinfo_map.items() if getattr(info, 'hidden', 0)}
+        if ext in ('.xlsx', '.xlsm'):
+            from openpyxl import load_workbook
+            wb = load_workbook(caminho)
+            ws = wb[_ABA_PROCESSOS] if _ABA_PROCESSOS in wb.sheetnames else wb.active
+            return {rx - 1 for rx, dim in ws.row_dimensions.items() if dim.hidden}  # openpyxl e 1-based
+    except Exception as e:
+        print(f"  [aviso] nao consegui ler linhas ocultas de {os.path.basename(caminho)}: {e}")
+    return set()
+
 def ler_planilha_fgts(caminho_arquivo):
     if not caminho_arquivo: return None
     try:
@@ -208,15 +230,13 @@ def ler_planilha_fgts(caminho_arquivo):
         return None
 
     idx_proc, idx_pis, idx_nomes = 1, 2, 3
-    IDX_COL_J = 9                     # coluna J (valor)
-    IDX_VALORES_ANTES_J = range(4, 9) # colunas E..I (valores antes do J)
     dados = []
-    excluidos_sem_valor = 0
+    # Pessoas em linha OCULTA foram excluidas de proposito -> ignora na
+    # conferencia (e o PDF delas tambem; ver verificar_pdfs).
+    ocultas = _linhas_ocultas(caminho_arquivo)
+    excluidos_ocultos = 0
+    excluidos_nomes = []
 
-    def _celula_vazia(v):
-        # Vazio de verdade (branco/NaN). '0' e '-' contam como valor (nao exclui).
-        return pd.isna(v) or str(v).strip().lower() in ('', 'nan', 'none')
-    
     encontrou_primeiro_inicio = False
     gap_linhas_vazias = 0
     bloco_atual = "PADRAO" 
@@ -239,14 +259,10 @@ def ler_planilha_fgts(caminho_arquivo):
             encontrou_primeiro_inicio = True
             gap_linhas_vazias = 0
 
-            # Filtra pessoas EXCLUIDAS: sem valor na coluna J E sem valor nas
-            # colunas antes dela (E..I). Assim quem so esqueceu o J, mas tem os
-            # outros valores, NAO e excluido por engano.
-            ncols = len(linha)
-            j_vazio = IDX_COL_J >= ncols or _celula_vazia(linha[IDX_COL_J])
-            antes_vazio = all(c >= ncols or _celula_vazia(linha[c]) for c in IDX_VALORES_ANTES_J)
-            if j_vazio and antes_vazio:
-                excluidos_sem_valor += 1
+            # Linha OCULTA = pessoa excluida de proposito -> ignora (e o PDF dela).
+            if i in ocultas:
+                excluidos_ocultos += 1
+                excluidos_nomes.append(str(val_nome))
                 continue
 
             val_pis = linha[idx_pis]
@@ -277,10 +293,11 @@ def ler_planilha_fgts(caminho_arquivo):
                 if gap_linhas_vazias > LIMITE_GAP_TOTAL:
                     break
 
-    if excluidos_sem_valor:
-        print(f"  {excluidos_sem_valor} pessoa(s) ignorada(s) (sem valor na coluna J e nas colunas anteriores).")
+    if excluidos_ocultos:
+        print(f"  {excluidos_ocultos} pessoa(s) ignorada(s) por estarem em linha OCULTA (excluidas).")
     df_final = pd.DataFrame(dados)
-    df_final.attrs['excluidos_sem_valor'] = excluidos_sem_valor
+    df_final.attrs['excluidos_ocultos'] = excluidos_ocultos
+    df_final.attrs['excluidos_nomes'] = excluidos_nomes
     return df_final
 
 def verificar_pdfs(df, pasta_pdfs):
@@ -320,6 +337,22 @@ def verificar_pdfs(df, pasta_pdfs):
             "tokens": _mn_tokens(_norm),   # pre-calculado (otimizacao)
             "variante": var,
         })
+
+    # Remove os PDFs das pessoas EXCLUIDAS (linhas ocultas) para nao aparecerem
+    # como "PDF na pasta, mas nao na planilha". Casa por tupla de tokens (exato),
+    # 1 PDF por pessoa excluida.
+    excluidos_nomes = df.attrs.get('excluidos_nomes', []) if hasattr(df, 'attrs') else []
+    if excluidos_nomes:
+        from collections import Counter
+        excl_conta = Counter(tuple(_mn_tokens(normalizar_texto(n))) for n in excluidos_nomes)
+        restantes = []
+        for a in arquivos_disponiveis:
+            t = tuple(a["tokens"])
+            if excl_conta.get(t, 0) > 0:
+                excl_conta[t] -= 1   # remove so 1 PDF por pessoa excluida
+                continue
+            restantes.append(a)
+        arquivos_disponiveis = restantes
 
     def _filtrar_por_variante(lista, variante):
         return [a for a in lista if a["variante"] == variante]
