@@ -54,6 +54,8 @@ CASOS = [
     # ...mas se AMBOS tem o mesmo sufixo, seguem casando normalmente:
     ("Antonio Anastacio da Silva Filho", "Antonio Anastacio da Silva Filho", "IGUAL"),
     ("Joao Franco da Silva Filho", "J Franco da Silva Filho", "ABREVIACAO"),
+    # Com abreviatura (A.=ALMEIDA) tolera 1 letra a mais/menos: RAMPACHE~RAMPCHE
+    ("Jayme Milagres Melo de A. Rampache", "Jayme Milagres Melo de Almeida Rampche", "ABREVIACAO"),
 ]
 
 

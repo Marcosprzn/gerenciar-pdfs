@@ -371,49 +371,47 @@ def verificar_pdfs(df, pasta_pdfs):
     arquivo_encontrado_lista = [""] * len(df)
     total_pessoas = len(df)
 
-    # Passada IGUAL: usa dicionario para match O(1)
-    norm_map = {}  # norm -> arquivo
+    # Indice por TUPLA DE TOKENS (ignora numeros/conectores) -> match exato O(1).
+    # Chavear pela tupla (nao pela string com o numero) trata "ARNALDO ... SOUZA 1"
+    # e "...2" como o mesmo nome "ARNALDO ... SOUZA" (o numero e so desambiguador).
+    from collections import defaultdict
+    tok_map = defaultdict(list)
     for a in arquivos_disponiveis:
-        norm_map[a["norm"]] = a  # ultimo vence (raro ter duplicatas)
+        tok_map[tuple(a["tokens"])].append(a)
+    disp_ids = {id(a) for a in arquivos_disponiveis}   # disponibilidade O(1)
 
+    nomes_lista = list(df['NOMES'])
+    tipos_lista = list(df['TIPO_LISTA']) if 'TIPO_LISTA' in df.columns else ['PADRAO'] * total_pessoas
+
+    # Match em PASSADAS POR CONFIANCA: exatos (IGUAL) de todas as linhas primeiro,
+    # depois abreviacoes, e so por ultimo as duvidas — sempre com o que sobrou.
     for niveis in [("IGUAL",), ("ABREVIACAO",), ("DUVIDA",)]:
-        desc = niveis[0]
-
-        for ordem in ["115", "PADRAO"]:
-            indices_ordem = [idx for idx, row in df.iterrows()
-                             if not status_lista[idx] and row.get('TIPO_LISTA', 'PADRAO') == ordem]
+        for ordem in ["115", "PADRAO"]:   # 115 tem prioridade nos arquivos
+            indices_ordem = [idx for idx in range(total_pessoas)
+                             if not status_lista[idx] and tipos_lista[idx] == ordem]
             if not indices_ordem:
                 continue
 
-            if niveis == ("IGUAL",):
-                # Busca direta no dicionario O(1) por pessoa
-                for idx in tqdm(indices_ordem, desc=f"IGUAL {ordem}", unit="pess", leave=False):
-                    nome_norm = normalizar_texto(df.iloc[idx]['NOMES'])
-                    a = norm_map.get(nome_norm)
-                    if a is None or a not in arquivos_disponiveis:
-                        continue
-                    # Verifica se esta no grupo correto (variante)
-                    tipo = df.iloc[idx].get('TIPO_LISTA', 'PADRAO')
-                    if tipo == "115" and a["variante"] != "REC115":
-                        continue
-                    if tipo != "115" and a["variante"] == "REC115":
-                        continue
+            for idx in tqdm(indices_ordem, desc=f"{niveis[0]} {ordem}", unit="pess", leave=False):
+                tipo_lista = tipos_lista[idx]
+                nome_norm = normalizar_texto(nomes_lista[idx])
+                match_obj = None
+                status = None
+                var_diff = False
 
-                    arquivos_disponiveis.remove(a)
-                    var_diff = (a["variante"] == "REC115") != (tipo == "115")
-                    status = "ENCONTRADO COMO 115" if tipo == "115" else "ENCONTRADO"
-                    if var_diff:
-                        status += " (VAR DIFF)"
-                    status_lista[idx] = status
-                    arquivo_encontrado_lista[idx] = os.path.splitext(a["real"])[0]
-            else:
-                # ABREVIACAO e DUVIDA: usa _buscar_em_grupo
-                for idx in tqdm(indices_ordem, desc=f"{desc} {ordem}", unit="pess", leave=False):
-                    row = df.iloc[idx]
-                    nome_planilha = row['NOMES']
-                    tipo_lista = row.get('TIPO_LISTA', 'PADRAO')
-                    nome_norm = normalizar_texto(nome_planilha)
-
+                if niveis == ("IGUAL",):
+                    # Match exato O(1) pela tupla de tokens (trata numero no fim).
+                    cands = [a for a in tok_map.get(tuple(_mn_tokens(nome_norm)), [])
+                             if id(a) in disp_ids]
+                    if cands:
+                        quer_115 = (tipo_lista == "115")
+                        # prefere PDF do grupo certo; senao aceita outro (VAR DIFF)
+                        mesmo_grupo = [a for a in cands if (a["variante"] == "REC115") == quer_115]
+                        match_obj = (mesmo_grupo or cands)[0]
+                        var_diff = (match_obj["variante"] == "REC115") != quer_115
+                        status = "ENCONTRADO"
+                else:
+                    # ABREVIACAO / DUVIDA via _buscar_em_grupo (grupo por variante).
                     if tipo_lista == "115":
                         grupo_primario = _filtrar_por_variante(arquivos_disponiveis, "REC115")
                         grupo_secundario = _filtrar_sem_variante(arquivos_disponiveis)
@@ -422,28 +420,20 @@ def verificar_pdfs(df, pasta_pdfs):
                         grupo_secundario = _filtrar_por_variante(arquivos_disponiveis, "REC115")
 
                     status, match_obj = _buscar_em_grupo(nome_norm, grupo_primario, USAR_LLM, niveis)
-                    var_diff = False
                     if not match_obj:
                         status, match_obj = _buscar_em_grupo(nome_norm, grupo_secundario, USAR_LLM, niveis)
                         if match_obj:
                             var_diff = True
 
-                    # Fallback para 115 na passada IGUAL
-                    if not match_obj and tipo_lista == "115":
-                        a = norm_map.get(nome_norm)
-                        if a and a in arquivos_disponiveis:
-                            status, match_obj = "ENCONTRADO", a
-                            var_diff = True
-
-                    if match_obj:
-                        if "POSSÍVEL ERRO NOMINAL" not in status:
-                            arquivos_disponiveis.remove(match_obj)
-                        if tipo_lista == "115" and "ENCONTRADO" in status:
-                            status = "ENCONTRADO COMO 115"
-                        if var_diff and "ENCONTRADO" in status:
-                            status = status + " (VAR DIFF)"
-                        status_lista[idx] = status
-                        arquivo_encontrado_lista[idx] = os.path.splitext(match_obj["real"])[0]
+                if match_obj:
+                    disp_ids.discard(id(match_obj))
+                    arquivos_disponiveis.remove(match_obj)
+                    if tipo_lista == "115" and "ENCONTRADO" in status:
+                        status = "ENCONTRADO COMO 115"
+                    if var_diff and "ENCONTRADO" in status:
+                        status = status + " (VAR DIFF)"
+                    status_lista[idx] = status
+                    arquivo_encontrado_lista[idx] = os.path.splitext(match_obj["real"])[0]
     # end for niveis
 
     # Linhas sem match em nenhuma passada -> nao encontrado

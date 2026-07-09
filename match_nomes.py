@@ -43,16 +43,17 @@ def _sufixo_geracional(tokens):
     return tokens[-1] if tokens and tokens[-1] in SUFIXOS_GERACIONAIS else None
 
 
-def _token_match(a, b):
+def _token_match(a, b, insercao_ok=False):
     """Dois tokens (palavras) representam o mesmo nome?
 
     Aceita: igualdade; inicial (1 letra); abreviatura curta (prefixo de ate
     3 letras, ex 'APAR'->'APARECIDA'); UM erro de digitacao (troca de 1 letra)
     em palavras de MESMO tamanho e 4+ letras (ex 'LUIZ'<->'LUIS').
-    Deliberadamente restrito:
-      - exigir mesmo tamanho evita ligar nomes distintos por insercao/remocao
-        de letra, ex 'SEVERINO'(8) x 'SEVERIANO'(9) -> pessoas diferentes.
-      - aceitar 2+ erros ligaria nomes diferentes (ex 'REGINALDO'<->'EDINALDO').
+
+    Por padrao NAO aceita insercao/remocao de letra (tamanhos diferentes), para
+    nao ligar nomes distintos como 'SEVERINO'(8) x 'SEVERIANO'(9). Mas quando
+    `insercao_ok` (ha uma inicial abreviada no nome -> e uma versao abreviada),
+    aceita 1 letra a mais/menos: ex 'RAMPACHE' x 'RAMPCHE'.
     """
     if a == b:
         return True
@@ -66,20 +67,24 @@ def _token_match(a, b):
         return True
     if 2 <= len(b) <= 3 and a.startswith(b):
         return True
-    # 1 troca de letra em palavras de MESMO tamanho e 4+ letras (Luiz x Luis)
-    if len(a) >= 4 and len(a) == len(b) and levenshtein(a, b) == 1:
-        return True
+    if len(a) >= 4 and len(b) >= 4:
+        # 1 troca de letra em palavras de MESMO tamanho (Luiz x Luis)
+        if len(a) == len(b) and levenshtein(a, b) == 1:
+            return True
+        # 1 letra a mais/menos, so quando ha abreviatura no nome (Rampache x Rampche)
+        if insercao_ok and abs(len(a) - len(b)) == 1 and levenshtein(a, b) == 1:
+            return True
     return False
 
 
-def _todos_casam(menor, maior):
+def _todos_casam(menor, maior, insercao_ok=False):
     """Todo token da lista menor casa com um token DISTINTO da maior?
     Devolve (bool, n_casados)."""
     usados = [False] * len(maior)
     casados = 0
     for tm in menor:
         for i, tM in enumerate(maior):
-            if not usados[i] and _token_match(tm, tM):
+            if not usados[i] and _token_match(tm, tM, insercao_ok):
                 usados[i] = True
                 casados += 1
                 break
@@ -88,7 +93,7 @@ def _todos_casam(menor, maior):
     return True, casados
 
 
-def _alinhar(menor, maior):
+def _alinhar(menor, maior, insercao_ok=False):
     """Casa cada token de `menor` com um de `maior` (greedy, via _token_match).
     Retorna (faltantes, sobras): tokens de `menor` sem par e tokens de `maior`
     que sobraram (nao usados)."""
@@ -96,7 +101,7 @@ def _alinhar(menor, maior):
     faltantes = []
     for tm in menor:
         for i, tM in enumerate(maior):
-            if not usados[i] and _token_match(tm, tM):
+            if not usados[i] and _token_match(tm, tM, insercao_ok):
                 usados[i] = True
                 break
         else:
@@ -123,10 +128,10 @@ def _relacionado_a_algum(t, tokens):
     return any(_relacionado(t, o) for o in tokens)
 
 
-def _score(tp, tf):
+def _score(tp, tf, insercao_ok=False):
     """Proporcao de tokens que casam (0..1), para ordenar candidatos."""
     menor, maior = (tp, tf) if len(tp) <= len(tf) else (tf, tp)
-    _, casados = _todos_casam(menor, maior)
+    _, casados = _todos_casam(menor, maior, insercao_ok)
     return casados / max(len(maior), 1)
 
 
@@ -152,23 +157,28 @@ def comparar_tokens(tp, tf):
     if tp == tf:
         return ("IGUAL", 1.0)
 
+    # Ha uma inicial abreviada (token de 1 letra)? Entao o nome e uma versao
+    # abreviada -> toleramos 1 letra a mais/menos nos outros tokens (Rampache x
+    # Rampche). Sem abreviatura, mantemos estrito (Severino != Severiano).
+    insercao_ok = any(len(t) == 1 for t in tp) or any(len(t) == 1 for t in tf)
+
     # Rejeicoes BARATAS antes de calcular o score (score varre tokens e custa
     # mais). Sufixo geracional (FILHO/NETO/...) e distintivo: pai x filho.
     if _sufixo_geracional(tp) != _sufixo_geracional(tf):
         return ("DIFERENTE", 0.0)
 
     # Primeiro nome diferente -> pessoa diferente.
-    if not _token_match(tp[0], tf[0]):
+    if not _token_match(tp[0], tf[0], insercao_ok):
         return ("DIFERENTE", 0.0)
 
-    score = _score(tp, tf)
-    ultimo_ok = _token_match(tp[-1], tf[-1])
+    score = _score(tp, tf, insercao_ok)
+    ultimo_ok = _token_match(tp[-1], tf[-1], insercao_ok)
 
     menor, maior = (tp, tf) if len(tp) <= len(tf) else (tf, tp)
 
     if ultimo_ok:
         # Mesmo primeiro nome e mesmo ultimo sobrenome, mas NAO identicos.
-        faltantes, sobras = _alinhar(menor, maior)
+        faltantes, sobras = _alinhar(menor, maior, insercao_ok)
         if faltantes:
             # Nome(s) do meio do lado menor sem par:
             #   - abreviatura/truncamento (compartilha prefixo) -> DUVIDA (revisar)
@@ -191,8 +201,8 @@ def comparar_tokens(tp, tf):
     # Caso "sobrenome extra no fim": o ultimo do menor casa com o penultimo do
     # maior e todo o menor esta contido no maior. Ex.: JOSE PRAZERES x
     # JOSE PRAZERES VIEIRA -> pode ser parente/homonimo -> DUVIDA.
-    if len(maior) > len(menor) and _token_match(menor[-1], maior[-2]):
-        casam, _ = _todos_casam(menor, maior)
+    if len(maior) > len(menor) and _token_match(menor[-1], maior[-2], insercao_ok):
+        casam, _ = _todos_casam(menor, maior, insercao_ok)
         if casam:
             return ("DUVIDA", score)
 
