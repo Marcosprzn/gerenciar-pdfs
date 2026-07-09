@@ -8,7 +8,11 @@ from openpyxl import load_workbook
 from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
 from difflib import SequenceMatcher
 import pandas as pd
-from tqdm import tqdm
+try:
+    from tqdm import tqdm
+except ImportError:   # tqdm e opcional (so a barra de progresso no terminal)
+    def tqdm(iteravel=None, *args, **kwargs):
+        return iteravel if iteravel is not None else []
 import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:

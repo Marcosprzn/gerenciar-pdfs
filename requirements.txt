@@ -9,6 +9,7 @@ pandas
 openpyxl>=3.0
 xlrd            # leitura de .xls antigo
 odfpy           # leitura de .ods (LibreOffice/OpenOffice)
+tqdm            # barra de progresso no terminal (opcional)
 
 # --- PDF e OCR ---
 PyMuPDF         # importado como "fitz" — leitura/renderizacao de PDF

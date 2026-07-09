@@ -16,7 +16,7 @@ if not exist "app.py" (
     exit /b
 )
 
-python -c "import flask, watchdog, pandas, openpyxl" 2>nul
+python -c "import flask, watchdog, pandas, openpyxl, xlrd, odf, waitress, tqdm" 2>nul
 if errorlevel 1 (
     echo Instalando dependencias necessarias pela primeira vez... aguarde.
     pip install -r requirements.txt -q

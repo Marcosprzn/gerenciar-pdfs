@@ -3,7 +3,11 @@ import os, re, sys, math, datetime, unicodedata, shutil
 import tkinter as tk
 from tkinter import filedialog
 from difflib import SequenceMatcher
-from tqdm import tqdm
+try:
+    from tqdm import tqdm
+except ImportError:   # tqdm e opcional (so a barra de progresso no terminal)
+    def tqdm(iteravel=None, *args, **kwargs):
+        return iteravel if iteravel is not None else []
 
 import pandas as pd
 import xlrd
