@@ -208,7 +208,14 @@ def ler_planilha_fgts(caminho_arquivo):
         return None
 
     idx_proc, idx_pis, idx_nomes = 1, 2, 3
+    IDX_COL_J = 9                     # coluna J (valor)
+    IDX_VALORES_ANTES_J = range(4, 9) # colunas E..I (valores antes do J)
     dados = []
+    excluidos_sem_valor = 0
+
+    def _celula_vazia(v):
+        # Vazio de verdade (branco/NaN). '0' e '-' contam como valor (nao exclui).
+        return pd.isna(v) or str(v).strip().lower() in ('', 'nan', 'none')
     
     encontrou_primeiro_inicio = False
     gap_linhas_vazias = 0
@@ -231,7 +238,17 @@ def ler_planilha_fgts(caminho_arquivo):
         if eh_nome:
             encontrou_primeiro_inicio = True
             gap_linhas_vazias = 0
-            
+
+            # Filtra pessoas EXCLUIDAS: sem valor na coluna J E sem valor nas
+            # colunas antes dela (E..I). Assim quem so esqueceu o J, mas tem os
+            # outros valores, NAO e excluido por engano.
+            ncols = len(linha)
+            j_vazio = IDX_COL_J >= ncols or _celula_vazia(linha[IDX_COL_J])
+            antes_vazio = all(c >= ncols or _celula_vazia(linha[c]) for c in IDX_VALORES_ANTES_J)
+            if j_vazio and antes_vazio:
+                excluidos_sem_valor += 1
+                continue
+
             val_pis = linha[idx_pis]
             # Se a coluna do PIS estiver vazia, procura nas colunas anteriores (deslocamento de célula)
             if pd.isna(val_pis) or str(val_pis).strip() in ('', '-', '0'):
@@ -260,7 +277,11 @@ def ler_planilha_fgts(caminho_arquivo):
                 if gap_linhas_vazias > LIMITE_GAP_TOTAL:
                     break
 
-    return pd.DataFrame(dados)
+    if excluidos_sem_valor:
+        print(f"  {excluidos_sem_valor} pessoa(s) ignorada(s) (sem valor na coluna J e nas colunas anteriores).")
+    df_final = pd.DataFrame(dados)
+    df_final.attrs['excluidos_sem_valor'] = excluidos_sem_valor
+    return df_final
 
 def verificar_pdfs(df, pasta_pdfs):
     if not pasta_pdfs or not os.path.exists(pasta_pdfs): 
