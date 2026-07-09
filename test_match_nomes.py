@@ -44,6 +44,9 @@ CASOS = [
     ("Luiz Pereira da Silva", "Luiz Rodolfo da Silva",   "DIFERENTE"),# PEREIRA != RODOLFO
     ("Antonio Julio da Cunha Filho", "Antonio Anastacio da Silva Filho", "DIFERENTE"),
     ("Reginaldo Manoel da Silva", "Edinaldo Vieira da Silva", "DIFERENTE"),
+    # SEVERINO x SEVERIANO: nomes distintos (insercao de letra) -> pessoas diferentes
+    ("Jose Severino da Silva", "Jose Severiano da Silva", "DIFERENTE"),
+    ("Jose Severino da Silva Filho", "Jose Severiano da Silva Filho", "DIFERENTE"),
     # Sufixo geracional (FILHO/NETO/...) e distintivo: pai x filho = diferentes.
     ("Severino Antonio da Silva", "Severino Antonio da Silva Filho", "DIFERENTE"),
     ("Severino Antonio da Silva Filho", "Severino Antonio da Silva Neto", "DIFERENTE"),

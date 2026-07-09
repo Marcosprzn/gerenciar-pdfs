@@ -47,9 +47,12 @@ def _token_match(a, b):
     """Dois tokens (palavras) representam o mesmo nome?
 
     Aceita: igualdade; inicial (1 letra); abreviatura curta (prefixo de ate
-    3 letras, ex 'APAR'->'APARECIDA'); UM erro de digitacao em palavras de 4+
-    letras (ex 'LUIZ'<->'LUIS'). Deliberadamente restrito: aceitar 2+ erros
-    ligaria nomes diferentes (ex 'REGINALDO'<->'EDINALDO').
+    3 letras, ex 'APAR'->'APARECIDA'); UM erro de digitacao (troca de 1 letra)
+    em palavras de MESMO tamanho e 4+ letras (ex 'LUIZ'<->'LUIS').
+    Deliberadamente restrito:
+      - exigir mesmo tamanho evita ligar nomes distintos por insercao/remocao
+        de letra, ex 'SEVERINO'(8) x 'SEVERIANO'(9) -> pessoas diferentes.
+      - aceitar 2+ erros ligaria nomes diferentes (ex 'REGINALDO'<->'EDINALDO').
     """
     if a == b:
         return True
@@ -63,8 +66,8 @@ def _token_match(a, b):
         return True
     if 2 <= len(b) <= 3 and a.startswith(b):
         return True
-    # 1 erro de digitacao em palavras de 4+ letras (Luiz x Luis)
-    if len(a) >= 4 and len(b) >= 4 and levenshtein(a, b) == 1:
+    # 1 troca de letra em palavras de MESMO tamanho e 4+ letras (Luiz x Luis)
+    if len(a) >= 4 and len(a) == len(b) and levenshtein(a, b) == 1:
         return True
     return False
 
@@ -103,20 +106,17 @@ def _alinhar(menor, maior):
 
 
 def _relacionado(a, b):
-    """a e b sao a mesma raiz de nome (abreviado/truncado)? Ex.: APAR ~ APARECIDA.
+    """a e b sao a mesma raiz de nome (abreviacao/truncamento)? Ex.: APAR ~ APARECIDA.
 
-    Usado so para graduar a DUVIDA: um nome do meio que compartilha prefixo com
-    o outro pode ser abreviacao (revisar); um nome sem qualquer parentesco de
-    escrita e outra pessoa.
+    So considera "parente" quando uma palavra e PREFIXO PROPRIO da outra (uma e
+    o comeco da outra). Compartilhar apenas um prefixo comum NAO basta:
+    'SEVERINO' e 'SEVERIANO' compartilham 'SEVERI' mas divergem depois -> sao
+    nomes/pessoas diferentes, nao abreviacao.
+
+    Usado so para graduar a DUVIDA (abreviacao -> revisar; nome de fato
+    diferente -> outra pessoa).
     """
-    if a == b or a.startswith(b) or b.startswith(a):
-        return True
-    comum = 0
-    for x, y in zip(a, b):
-        if x != y:
-            break
-        comum += 1
-    return comum >= 3
+    return a == b or a.startswith(b) or b.startswith(a)
 
 
 def _relacionado_a_algum(t, tokens):
@@ -131,10 +131,20 @@ def _score(tp, tf):
 
 
 def comparar_nomes(nome_planilha, nome_pdf):
-    """Compara dois nomes. Retorna (veredicto, score) com veredicto em
+    """Compara dois nomes (strings). Retorna (veredicto, score).
+    Atalho para comparar_tokens; para lacos grandes, pre-calcule os tokens uma
+    vez (ver `tokens`) e chame comparar_tokens diretamente (bem mais rapido)."""
+    return comparar_tokens(_tokens(nome_planilha), _tokens(nome_pdf))
+
+
+# Nome publico para pre-calcular tokens fora deste modulo (otimizacao).
+tokens = _tokens
+
+
+def comparar_tokens(tp, tf):
+    """Como comparar_nomes, mas recebe as listas de tokens JA calculadas.
+    Retorna (veredicto, score) com veredicto em
     {"IGUAL", "ABREVIACAO", "DUVIDA", "DIFERENTE"} e score float [0..1]."""
-    tp = _tokens(nome_planilha)
-    tf = _tokens(nome_pdf)
     if not tp or not tf:
         return ("DIFERENTE", 0.0)
 
@@ -142,19 +152,17 @@ def comparar_nomes(nome_planilha, nome_pdf):
     if tp == tf:
         return ("IGUAL", 1.0)
 
-    score = _score(tp, tf)
-
-    # Sufixo geracional (FILHO/NETO/JUNIOR/...) e distintivo: se um lado tem e o
-    # outro nao (ou sao diferentes), sao pessoas diferentes (ex.: pai x filho).
+    # Rejeicoes BARATAS antes de calcular o score (score varre tokens e custa
+    # mais). Sufixo geracional (FILHO/NETO/...) e distintivo: pai x filho.
     if _sufixo_geracional(tp) != _sufixo_geracional(tf):
-        return ("DIFERENTE", score)
-
-    primeiro_ok = _token_match(tp[0], tf[0])
-    ultimo_ok = _token_match(tp[-1], tf[-1])
+        return ("DIFERENTE", 0.0)
 
     # Primeiro nome diferente -> pessoa diferente.
-    if not primeiro_ok:
-        return ("DIFERENTE", score)
+    if not _token_match(tp[0], tf[0]):
+        return ("DIFERENTE", 0.0)
+
+    score = _score(tp, tf)
+    ultimo_ok = _token_match(tp[-1], tf[-1])
 
     menor, maior = (tp, tf) if len(tp) <= len(tf) else (tf, tp)
 
