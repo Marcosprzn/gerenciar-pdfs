@@ -1359,11 +1359,14 @@ def gerar_conciliacao():
                 mapa_pastas[f"{mes}-{ano}"] = caminho_dir
 
     resultados = []
-    
+    _progresso_conc.update(atual=0, total=len(_state['planilhas']), rodando=True, label='')
+
     for comp, p_data in _state['planilhas'].items():
+        _progresso_conc['label'] = comp
+        _progresso_conc['atual'] += 1
         df = p_data['df'].copy()
         nome_orig = p_data['nome_original']
-        
+
         pasta_pdfs = mapa_pastas.get(comp)
         if not pasta_pdfs:
             # Planilha sem pasta correspondente
@@ -1388,6 +1391,7 @@ def gerar_conciliacao():
             resultados.append(f"Erro ao salvar {nome_saida}: {str(e)}")
             
     # Ao final da geracao, limpa o estado
+    _progresso_conc['rodando'] = False
     _state['planilhas'] = {}
     return jsonify({'ok': True, 'resultados': resultados, 'destino': pasta_destino})
 

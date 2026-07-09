@@ -1393,17 +1393,30 @@ async function limparConciliacao() {
 
 async function gerarConciliacao() {
   showLoading('Gerando conciliacao...');
-  const r = await post('/api/gerar-conciliacao', {});
-  hideLoading();
-  if (r.ok) {
-    toast(`Geração concluída na pasta: ${r.destino}`, 'success');
-    if (r.resultados) {
-      alert("Concluído!\n\n" + r.resultados.join("\n"));
+  const msg = document.getElementById('loading-msg');
+  const pollId = setInterval(async () => {
+    try {
+      const p = await get('/api/progresso-conciliacao');
+      if (p && p.total && p.rodando) {
+        msg.textContent = `Salvando ${p.pct}% (${p.atual}/${p.total})` + (p.label ? ` — ${p.label}` : '');
+      }
+    } catch (e) { /* ignora falhas de polling */ }
+  }, 500);
+  try {
+    const r = await post('/api/gerar-conciliacao', {});
+    if (r.ok) {
+      toast(`Geração concluída na pasta: ${r.destino}`, 'success');
+      if (r.resultados) {
+        alert("Concluído!\n\n" + r.resultados.join("\n"));
+      }
+      carregarStatusConciliacao();
+      document.getElementById('conciliacao-audit').innerHTML = '';
+    } else {
+      toast('Erro: ' + r.erro, 'error');
     }
-    carregarStatusConciliacao();
-    document.getElementById('conciliacao-audit').innerHTML = '';
-  } else {
-    toast('Erro: ' + r.erro, 'error');
+  } finally {
+    clearInterval(pollId);
+    hideLoading();
   }
 }
 
