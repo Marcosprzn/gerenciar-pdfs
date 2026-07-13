@@ -485,7 +485,17 @@
         </div>
       </div>
       <p style="color:var(--text2); margin-bottom:20px;">Carregue as planilhas do FGTS. Em seguida clique em <b>Analisar com PDFs</b> para auditar os nomes e corrigir os .xls físicos cruzando pelo PIS.</p>
-      
+
+      <!-- ── Modo por ANO: seleciona a pasta-mae com 2007, 2008, ... ── -->
+      <div style="border:1px dashed var(--border2); border-radius:var(--radius-sm); padding:14px 16px; margin-bottom:22px;">
+        <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+          <button class="btn btn-blue" onclick="selecionarPastaAnos()">📁 Selecionar Pasta dos Anos</button>
+          <span class="text-sm">Cada ano deve ter as pastas <b>ANO PDF</b> e <b>ANO EXCEL</b>. Clique num ano para ver a conciliação dele.</span>
+        </div>
+        <div id="anos-info" class="text-sm" style="margin-top:8px;"></div>
+        <div id="anos-tabs" class="subtabs" style="margin-top:12px; display:none;"></div>
+      </div>
+
       <div id="conciliacao-cards" style="display:flex; flex-wrap:wrap; gap:15px; margin-bottom:30px;">
         <!-- Cards das competencias carregadas aparecerao aqui -->
       </div>
@@ -1138,6 +1148,11 @@ async function post(url, data) {
   }
 }
 
+async function get(url) {
+  const r = await fetch(url);
+  return await r.json();
+}
+
 function showLoading(msg) {
   document.getElementById('loading-msg').textContent = msg || 'Processando...';
   document.getElementById('loading').classList.add('show');
@@ -1453,6 +1468,56 @@ async function analisarConciliacao() {
     prog.style.display = 'none';
     btn.innerHTML = oldText;
     btn.disabled = false;
+  }
+}
+
+// ── Modo por ANO ──────────────────────────────────────────────
+async function selecionarPastaAnos() {
+  showLoading('Procurando anos...');
+  const r = await post('/api/selecionar-pasta-anos', {});
+  hideLoading();
+  if (!r.ok) return toast(r.erro, 'error');
+  const info = document.getElementById('anos-info');
+  const tabs = document.getElementById('anos-tabs');
+  if (!r.anos || r.anos.length === 0) {
+    info.textContent = 'Nenhum ano encontrado (esperado: subpastas "ANO PDF" e "ANO EXCEL" dentro de cada pasta de ano).';
+    tabs.style.display = 'none';
+    return;
+  }
+  info.innerHTML = `<b>${r.anos.length}</b> ano(s) encontrado(s) em: ${r.pasta}`;
+  tabs.innerHTML = r.anos.map(a =>
+    `<button class="subtab-btn" id="anotab-${a.ano}" onclick="analisarAno('${a.ano}')">${a.ano} <span style="opacity:.55; font-weight:400;">(${a.excel} xls · ${a.pdf_pastas} meses)</span></button>`
+  ).join('');
+  tabs.style.display = 'flex';
+  document.getElementById('conciliacao-audit').innerHTML =
+    '<p style="color:var(--text2);">👆 Clique num ano acima para ver a conciliação dele.</p>';
+}
+
+async function analisarAno(ano) {
+  document.querySelectorAll('#anos-tabs .subtab-btn').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById('anotab-' + ano);
+  if (btn) btn.classList.add('active');
+
+  const prog = document.getElementById('analise-progresso');
+  const progTxt = document.getElementById('analise-progresso-texto');
+  progTxt.textContent = 'Analisando ' + ano + '...';
+  prog.style.display = 'flex';
+  const pollId = setInterval(async () => {
+    try {
+      const p = await get('/api/progresso-conciliacao');
+      if (p && p.total && p.rodando) {
+        progTxt.textContent = `${ano}: ${p.pct}% (${p.atual}/${p.total})` + (p.label ? ` — ${p.label}` : '');
+      }
+    } catch (e) { /* ignora */ }
+  }, 400);
+  try {
+    const r = await post('/api/analisar-ano', { ano });
+    if (!r.ok) { toast('Erro: ' + r.erro, 'error'); return; }
+    window.auditData = r.resultados;
+    renderAuditTabs();
+  } finally {
+    clearInterval(pollId);
+    prog.style.display = 'none';
   }
 }
 

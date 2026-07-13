@@ -808,6 +808,181 @@ def analisar_conciliacao():
     _progresso_conc['rodando'] = False
     return jsonify({'ok': True, 'resultados': resultados_audit})
 
+# ─── Modo MULTI-ANO ─────────────────────────────────────────────────────
+def _status_base_conc(s):
+    for prefixo in [
+        "NÃO ENCONTRADO NO .PDF", "DUPLICADO NA PLANILHA", "POSSÍVEL ERRO NOMINAL",
+        "ENCONTRADO VIA LLM", "ENCONTRADO COMO 115", "ENCONTRADO COM ABREVIAÇÃO",
+        "ENCONTRADO",
+    ]:
+        if str(s).startswith(prefixo):
+            return prefixo
+    if str(s).startswith("PDF NA PASTA"):
+        return "PDF NA PASTA, MAS NÃO NA PLANILHA"
+    return str(s)
+
+
+def _analisar_planilhas(planilhas, pdf_root):
+    """Concilia um conjunto de planilhas (por competencia) contra a pasta-raiz
+    de PDFs (com subpastas por competencia). Retorna resultados_audit (mesmo
+    formato de /api/analisar-conciliacao)."""
+    mapa_pastas = {}
+    if pdf_root and os.path.isdir(pdf_root):
+        for d in os.listdir(pdf_root):
+            caminho_dir = os.path.join(pdf_root, d)
+            if os.path.isdir(caminho_dir):
+                mes, ano = confinicial.extrair_competencia_pasta(d)
+                if mes and ano:
+                    mapa_pastas[f"{mes}-{ano}"] = caminho_dir
+
+    resultados_audit = {}
+    _progresso_conc.update(atual=0, total=len(planilhas), rodando=True, label='')
+    try:
+        for comp, p_data in planilhas.items():
+            _progresso_conc['label'] = comp
+            _progresso_conc['atual'] += 1
+            df = p_data['df'].copy()
+            pasta_pdfs = mapa_pastas.get(comp)
+            if not pasta_pdfs:
+                resultados_audit[comp] = {
+                    'erro_pasta': True, 'estatisticas': {}, 'encontrados': [],
+                    'encontrados_abreviacao': [], 'erros_nominais': [],
+                    'nao_encontrados': [], 'pdfs_extras': [],
+                    'caminho_planilha': p_data['caminho']
+                }
+                continue
+
+            df_verificado = confinicial.verificar_pdfs(df, pasta_pdfs)
+            df_verificado['Status Base'] = df_verificado['Status PDF'].apply(_status_base_conc)
+            totais = df_verificado['Status Base'].value_counts().to_dict()
+            estatisticas = {
+                'encontrados': totais.get('ENCONTRADO', 0) + totais.get('ENCONTRADO COMO 115', 0) + totais.get('ENCONTRADO COM ABREVIAÇÃO', 0) + totais.get('ENCONTRADO VIA LLM', 0),
+                'erros_nominais': totais.get('POSSÍVEL ERRO NOMINAL', 0),
+                'nao_encontrados': totais.get('NÃO ENCONTRADO NO .PDF', 0),
+                'pdfs_extras': totais.get('PDF NA PASTA, MAS NÃO NA PLANILHA', 0),
+                'llm': totais.get('ENCONTRADO VIA LLM', 0)
+            }
+            encontrados, encontrados_abreviacao = [], []
+            erros_nominais, nao_encontrados, pdfs_extras = [], [], []
+            for idx, row in df_verificado.iterrows():
+                status = str(row.get('Status Base', ''))
+                pis = normalizar_pis(row.get('PIS', ''))
+                nome_planilha = str(row.get('NOMES', ''))
+                nome_pdf = str(row.get('Nome do Arquivo Encontrado', ''))
+                proc = str(row.get('PROC.', ''))
+                if status == 'POSSÍVEL ERRO NOMINAL':
+                    erros_nominais.append({'pis': pis, 'nome_planilha': nome_planilha, 'nome_pdf': nome_pdf})
+                elif status == 'NÃO ENCONTRADO NO .PDF':
+                    nao_encontrados.append({'pis': pis, 'nome_planilha': nome_planilha, 'proc': proc})
+                elif status == 'DUPLICADO NA PLANILHA':
+                    encontrados.append({'pis': pis, 'nome_planilha': nome_planilha, 'nome_pdf': '(duplicado na planilha)', 'proc': proc, 'detalhe': 'DUPLICADO NA PLANILHA'})
+                elif status == 'PDF NA PASTA, MAS NÃO NA PLANILHA':
+                    pdfs_extras.append({'nome_pdf': nome_pdf})
+                elif status in ['ENCONTRADO', 'ENCONTRADO COMO 115', 'ENCONTRADO VIA LLM']:
+                    encontrados.append({'pis': pis, 'nome_planilha': nome_planilha, 'nome_pdf': nome_pdf, 'proc': proc, 'detalhe': str(row.get('Status PDF', ''))})
+                elif status == 'ENCONTRADO COM ABREVIAÇÃO':
+                    encontrados_abreviacao.append({'pis': pis, 'nome_planilha': nome_planilha, 'nome_pdf': nome_pdf, 'proc': proc, 'detalhe': str(row.get('Status PDF', ''))})
+            resultados_audit[comp] = {
+                'erro_pasta': False, 'estatisticas': estatisticas,
+                'encontrados': encontrados, 'encontrados_abreviacao': encontrados_abreviacao,
+                'erros_nominais': erros_nominais, 'nao_encontrados': nao_encontrados,
+                'pdfs_extras': pdfs_extras, 'caminho_planilha': p_data['caminho']
+            }
+    finally:
+        _progresso_conc['rodando'] = False
+    return resultados_audit
+
+
+def _carregar_planilhas_pasta(excel_dir):
+    """Carrega todas as planilhas (.xls/.xlsx/.ods) de uma pasta, por competencia."""
+    planilhas = {}
+    if not excel_dir or not os.path.isdir(excel_dir):
+        return planilhas
+    for f in sorted(os.listdir(excel_dir)):
+        if not f.lower().endswith(('.xls', '.xlsx', '.ods')):
+            continue
+        mes, ano = confinicial.extrair_competencia_excel(f)
+        if not mes:
+            continue
+        cam = os.path.join(excel_dir, f)
+        try:
+            df = confinicial.ler_planilha_fgts(cam)
+        except Exception:
+            df = None
+        if df is None or df.empty:
+            continue
+        planilhas[f"{mes}-{ano}"] = {'caminho': cam, 'nome_original': f, 'df': df}
+    return planilhas
+
+
+def _detectar_anos(parent):
+    """Detecta as pastas de ANO em `parent`. Cada ano tem 3 subpastas:
+    'ANO PDF', 'ANO EXCEL', 'ANO CONFERENCIA'. Retorna {ano: {pdf,excel,conferencia,nome}}."""
+    anos = {}
+    if not parent or not os.path.isdir(parent):
+        return anos
+    for d in sorted(os.listdir(parent)):
+        cam = os.path.join(parent, d)
+        if not os.path.isdir(cam):
+            continue
+        sub = {}
+        try:
+            for s in os.listdir(cam):
+                p = os.path.join(cam, s)
+                if os.path.isdir(p):
+                    sub[s.upper()] = p
+        except Exception:
+            continue
+        pdf_dir = next((v for k, v in sub.items() if k.endswith('PDF')), None)
+        excel_dir = next((v for k, v in sub.items() if 'EXCEL' in k), None)
+        conf_dir = next((v for k, v in sub.items() if 'CONFEREN' in k), None)
+        if pdf_dir and excel_dir:
+            m = re.search(r'(19|20)\d{2}', d) or re.search(r'(19|20)\d{2}', os.path.basename(pdf_dir))
+            ano = m.group(0) if m else d
+            anos[ano] = {'nome': d, 'pdf': pdf_dir, 'excel': excel_dir, 'conferencia': conf_dir}
+    return anos
+
+
+@app.route('/api/selecionar-pasta-anos', methods=['POST'])
+def selecionar_pasta_anos():
+    try:
+        dlg = tk.Tk(); dlg.withdraw(); dlg.attributes('-topmost', True)
+        parent = filedialog.askdirectory(title="Selecione a pasta que contem os ANOS (2007, 2008, ...)")
+        dlg.destroy()
+    except Exception as e:
+        return jsonify({'ok': False, 'erro': f'Erro ao abrir seletor: {str(e)}'})
+    if not parent:
+        return jsonify({'ok': False, 'erro': 'Nenhuma pasta selecionada'})
+    anos = _detectar_anos(parent)
+    _state['anos'] = anos
+    _state['pasta_anos'] = parent
+    lista = []
+    for ano in sorted(anos):
+        info = anos[ano]
+        try:
+            n_xls = len([f for f in os.listdir(info['excel']) if f.lower().endswith(('.xls', '.xlsx', '.ods'))])
+        except Exception:
+            n_xls = 0
+        try:
+            n_pdfsub = len([d for d in os.listdir(info['pdf']) if os.path.isdir(os.path.join(info['pdf'], d))])
+        except Exception:
+            n_pdfsub = 0
+        lista.append({'ano': ano, 'nome': info['nome'], 'excel': n_xls, 'pdf_pastas': n_pdfsub})
+    return jsonify({'ok': True, 'pasta': parent, 'anos': lista})
+
+
+@app.route('/api/analisar-ano', methods=['POST'])
+def analisar_ano():
+    ano = str(request.json.get('ano', ''))
+    info = _state.get('anos', {}).get(ano)
+    if not info:
+        return jsonify({'ok': False, 'erro': f'Ano {ano} nao carregado. Selecione a pasta dos anos primeiro.'})
+    planilhas = _carregar_planilhas_pasta(info['excel'])
+    if not planilhas:
+        return jsonify({'ok': False, 'erro': f'Nenhuma planilha valida em "{os.path.basename(info["excel"])}".'})
+    resultados = _analisar_planilhas(planilhas, info['pdf'])
+    return jsonify({'ok': True, 'ano': ano, 'resultados': resultados})
+
 @app.route('/api/progresso-conciliacao', methods=['GET'])
 def progresso_conciliacao():
     p = dict(_progresso_conc)
