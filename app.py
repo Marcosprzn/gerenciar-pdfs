@@ -4,7 +4,7 @@ Gerenciador de PDFs — Renomeação por Planilha
 Flask web app para corrigir nomes de PDFs usando planilhas de referência.
 """
 from flask import Flask, render_template, request, jsonify
-import os, re, unicodedata, datetime, json
+import os, re, unicodedata, datetime, json, shutil
 from difflib import SequenceMatcher
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
@@ -982,6 +982,73 @@ def analisar_ano():
         return jsonify({'ok': False, 'erro': f'Nenhuma planilha valida em "{os.path.basename(info["excel"])}".'})
     resultados = _analisar_planilhas(planilhas, info['pdf'])
     return jsonify({'ok': True, 'ano': ano, 'resultados': resultados})
+
+
+@app.route('/api/gerar-ano', methods=['POST'])
+def gerar_ano():
+    """Salva e organiza um ANO: APAGA tudo na pasta 'ANO CONFERENCIA' e gera de
+    novo (relatorios .xlsx + organizacao dos PDFs em 115/660), por competencia."""
+    ano = str(request.json.get('ano', ''))
+    info = _state.get('anos', {}).get(ano)
+    if not info:
+        return jsonify({'ok': False, 'erro': f'Ano {ano} nao carregado. Selecione a pasta dos anos primeiro.'})
+
+    # Pasta de saida = "ANO CONFERENCIA" (dentro da pasta do ano)
+    year_dir = os.path.dirname(info['pdf'])
+    destino = info.get('conferencia') or os.path.join(year_dir, f"{ano} CONFERENCIA")
+    # Trava de seguranca: so mexe se o nome contiver CONFERENCIA (evita apagar
+    # a pasta errada por acidente).
+    if 'CONFEREN' not in os.path.basename(destino).upper():
+        return jsonify({'ok': False, 'erro': 'Pasta de conferencia invalida (nome nao contem CONFERENCIA).'})
+
+    planilhas = _carregar_planilhas_pasta(info['excel'])
+    if not planilhas:
+        return jsonify({'ok': False, 'erro': f'Nenhuma planilha valida em "{os.path.basename(info["excel"])}".'})
+
+    # APAGA tudo na pasta CONFERENCIA e recria vazia
+    try:
+        if os.path.isdir(destino):
+            shutil.rmtree(destino)
+        os.makedirs(destino, exist_ok=True)
+    except Exception as e:
+        return jsonify({'ok': False, 'erro': f'Falha ao limpar a pasta CONFERENCIA: {e}'})
+
+    # Mapa de pastas de PDF por competencia
+    mapa_pastas = {}
+    for d in os.listdir(info['pdf']):
+        cam = os.path.join(info['pdf'], d)
+        if os.path.isdir(cam):
+            mes, a = confinicial.extrair_competencia_pasta(d)
+            if mes and a:
+                mapa_pastas[f"{mes}-{a}"] = cam
+
+    resultados = []
+    _progresso_conc.update(atual=0, total=len(planilhas), rodando=True, label='')
+    try:
+        for comp, p_data in planilhas.items():
+            _progresso_conc['label'] = comp
+            _progresso_conc['atual'] += 1
+            df = p_data['df'].copy()
+            pasta_pdfs = mapa_pastas.get(comp)
+            if not pasta_pdfs:
+                df['Status PDF'] = "PASTA NÃO ENCONTRADA"
+                df['Nome do Arquivo Encontrado'] = ""
+                df_final = df
+                total_pdfs = 0
+            else:
+                total_pdfs = len([f for f in os.listdir(pasta_pdfs) if f.lower().endswith(('.pdf', '.tif', '.tiff'))])
+                df_final = confinicial.verificar_pdfs(df, pasta_pdfs)
+                confinicial.organizar_pdfs_por_resultado(df_final, pasta_pdfs, destino)
+            nome_saida = f"Conciliacao_{comp}.xlsx"
+            try:
+                confinicial.salvar_com_resumo(df_final, os.path.join(destino, nome_saida), total_pdfs=total_pdfs)
+                resultados.append(f"Gerado: {nome_saida}")
+            except Exception as e:
+                resultados.append(f"Erro ao salvar {nome_saida}: {str(e)}")
+    finally:
+        _progresso_conc['rodando'] = False
+
+    return jsonify({'ok': True, 'ano': ano, 'destino': destino, 'resultados': resultados})
 
 @app.route('/api/progresso-conciliacao', methods=['GET'])
 def progresso_conciliacao():

@@ -494,6 +494,9 @@
         </div>
         <div id="anos-info" class="text-sm" style="margin-top:8px;"></div>
         <div id="anos-tabs" class="subtabs" style="margin-top:12px; display:none;"></div>
+        <div id="salvar-ano-wrap" style="display:none; margin-top:14px; padding-top:12px; border-top:1px solid var(--border);">
+          <button class="btn btn-green" id="btn-salvar-ano" onclick="salvarAno()"></button>
+        </div>
       </div>
 
       <div id="conciliacao-cards" style="display:flex; flex-wrap:wrap; gap:15px; margin-bottom:30px;">
@@ -1472,6 +1475,8 @@ async function analisarConciliacao() {
 }
 
 // ── Modo por ANO ──────────────────────────────────────────────
+let anoAtivo = null;
+
 async function selecionarPastaAnos() {
   showLoading('Procurando anos...');
   const r = await post('/api/selecionar-pasta-anos', {});
@@ -1498,6 +1503,12 @@ async function analisarAno(ano) {
   const btn = document.getElementById('anotab-' + ano);
   if (btn) btn.classList.add('active');
 
+  // Habilita o botao de salvar para este ano
+  anoAtivo = ano;
+  const bs = document.getElementById('btn-salvar-ano');
+  bs.textContent = `💾 Salvar ${ano} (apaga e recria a pasta "${ano} CONFERENCIA")`;
+  document.getElementById('salvar-ano-wrap').style.display = 'block';
+
   const prog = document.getElementById('analise-progresso');
   const progTxt = document.getElementById('analise-progresso-texto');
   progTxt.textContent = 'Analisando ' + ano + '...';
@@ -1518,6 +1529,33 @@ async function analisarAno(ano) {
   } finally {
     clearInterval(pollId);
     prog.style.display = 'none';
+  }
+}
+
+async function salvarAno() {
+  if (!anoAtivo) return;
+  if (!confirm(`ATENÇÃO: isso vai APAGAR tudo dentro da pasta "${anoAtivo} CONFERENCIA" e gerar de novo os relatórios e a organização dos PDFs desse ano.\n\nDeseja continuar?`)) return;
+  showLoading('Salvando ' + anoAtivo + '...');
+  const msg = document.getElementById('loading-msg');
+  const pollId = setInterval(async () => {
+    try {
+      const p = await get('/api/progresso-conciliacao');
+      if (p && p.total && p.rodando) {
+        msg.textContent = `Salvando ${anoAtivo} — ${p.pct}% (${p.atual}/${p.total})` + (p.label ? ` — ${p.label}` : '');
+      }
+    } catch (e) { /* ignora */ }
+  }, 500);
+  try {
+    const r = await post('/api/gerar-ano', { ano: anoAtivo });
+    if (r.ok) {
+      toast(`Ano ${anoAtivo} salvo em: ${r.destino}`, 'success');
+      if (r.resultados) alert(`Concluído (${anoAtivo}):\n\n` + r.resultados.join("\n"));
+    } else {
+      toast('Erro: ' + r.erro, 'error');
+    }
+  } finally {
+    clearInterval(pollId);
+    hideLoading();
   }
 }
 
